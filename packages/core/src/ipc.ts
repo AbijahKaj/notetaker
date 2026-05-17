@@ -13,7 +13,15 @@ export type IpcEvent =
   | { type: "session:closed"; payload: Session }
   | { type: "transcript:segment"; payload: TranscriptSegment }
   | { type: "audio:level"; payload: { sourceId: string; rms: number } }
-  | { type: "models:download:progress"; payload: { id: string; receivedBytes: number; totalBytes: number } }
+  | {
+      type: "models:download:progress";
+      payload: {
+        id: string;
+        phase: "downloading" | "extracting" | "finishing" | "done";
+        receivedBytes?: number;
+        totalBytes?: number;
+      };
+    }
   | { type: "permission:changed"; payload: { kind: "microphone" | "systemAudio"; granted: boolean } }
   | { type: "summary:ready"; payload: { sessionId: string; summary: MeetingSummary } }
   | { type: "error"; payload: { where: string; message: string } };

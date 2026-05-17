@@ -13,7 +13,7 @@ import {
   SAMPLE_RATE,
   type PipelineEvents,
 } from "@notetaker/core";
-import { PCM_HEADER_SIZE, type SidecarCommand, type SidecarSource } from "./protocol.js";
+import { PCM_HEADER_SIZE, type SidecarCommand, type SidecarEvent, type SidecarSource } from "./protocol.js";
 
 const log = createLogger("audio-bridge");
 
@@ -80,16 +80,27 @@ export class AudioBridge extends TypedEmitter<PipelineEvents> {
   async removeSource(sourceId: string): Promise<void> {
     if (!this.sources.has(sourceId)) return;
     this.sendCommand({ cmd: "remove", sourceId });
-    this.sources.delete(sourceId);
-    this.emit("audio:source:removed", { sourceId });
   }
 
   private async addSource(sidecarSource: SidecarSource, spec: SourceSpec): Promise<string> {
     const sourceId = newSourceId(spec.kind);
     this.sources.set(sourceId, { sourceId, spec });
     this.sendCommand({ cmd: "add", source: sidecarSource, sourceId });
-    this.emit("audio:source:added", { sourceId });
     return sourceId;
+  }
+
+  private handleSidecarEvent(evt: SidecarEvent): void {
+    if (evt.type === "source:started") {
+      if (this.sources.has(evt.sourceId)) {
+        this.emit("audio:source:added", { sourceId: evt.sourceId });
+      }
+    } else if (evt.type === "source:stopped") {
+      if (this.sources.delete(evt.sourceId)) {
+        this.emit("audio:source:removed", { sourceId: evt.sourceId });
+      }
+    } else if (evt.type === "error") {
+      log.error("sidecar error", { message: evt.message });
+    }
   }
 
   private startSocketServer(): Promise<void> {
@@ -152,14 +163,14 @@ export class AudioBridge extends TypedEmitter<PipelineEvents> {
         const lines = data.toString("utf8").split("\n").filter(Boolean);
         for (const line of lines) {
           try {
-            const evt = JSON.parse(line) as { type: string };
+            const evt = JSON.parse(line) as SidecarEvent | { type: "ready" };
             if (evt.type === "ready") {
               ready = true;
               clearTimeout(timeout);
               this.sendCommand({ cmd: "start", socketPath: this.socketPath });
               resolve();
-            } else if (evt.type === "error") {
-              log.error("sidecar error", { line });
+            } else {
+              this.handleSidecarEvent(evt as SidecarEvent);
             }
           } catch {
             log.debug("sidecar stdout", { line });

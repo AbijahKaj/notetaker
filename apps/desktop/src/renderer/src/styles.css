@@ -56,6 +56,14 @@ input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
 }
 
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  padding: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
 textarea {
   resize: vertical;
   min-height: 120px;
@@ -259,6 +267,19 @@ textarea {
   width: auto;
 }
 
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-toggle span {
+  flex: 1;
+}
+
 .summary-section {
   margin-bottom: 20px;
 }
@@ -321,4 +342,27 @@ textarea {
   height: 100%;
   background: var(--accent);
   transition: width 0.3s;
+}
+
+.progress-bar-fill-pulse {
+  opacity: 0.85;
+}
+
+.progress-bar-indeterminate {
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-bar-indeterminate::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: var(--accent);
+  animation: progress-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
 }

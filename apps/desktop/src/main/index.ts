@@ -14,7 +14,6 @@ import { SummarizationService } from "./services/SummarizationService.js";
 import { ModelManager } from "./services/ModelManager.js";
 import { LlmKeyService } from "./services/LlmKeyService.js";
 import { AppWatcherService } from "./services/AppWatcherService.js";
-import { TabPollerService } from "./services/TabPollerService.js";
 import { PermissionsService } from "./services/PermissionsService.js";
 
 const log = createLogger("main");
@@ -38,7 +37,6 @@ class Application {
   models!: ModelManager;
   llmKeys!: LlmKeyService;
   appWatcher!: AppWatcherService;
-  tabPoller!: TabPollerService;
   permissions!: PermissionsService;
 
   async init(): Promise<void> {
@@ -58,7 +56,6 @@ class Application {
     this.summarizer = new SummarizationService(this.llmKeys, this.prefs, this.models);
 
     this.appWatcher = new AppWatcherService(this.prefs);
-    this.tabPoller = new TabPollerService(this.prefs);
     this.permissions = new PermissionsService();
 
     this.wirePipeline();
@@ -82,10 +79,10 @@ class Application {
       }
     });
     this.audio.on("audio:source:added", ({ sourceId }) => {
-      log.info("audio source added", { sourceId });
+      log.info("audio capture started", { sourceId });
     });
     this.audio.on("audio:source:removed", ({ sourceId }) => {
-      log.info("audio source removed", { sourceId });
+      log.info("audio capture stopped", { sourceId });
     });
 
     this.speech.on("transcript:segment", async (seg) => {
@@ -112,19 +109,20 @@ class Application {
       }
     });
 
-    this.appWatcher.on("activate", async (bundleId, name) => {
-      await this.audio.addAppSource({ bundleId });
-      log.info("app activated", { bundleId, name });
+    this.appWatcher.on("activate", async (bundleId, name, kind) => {
+      if (kind === "browser") {
+        await this.audio.addBrowserSource({ bundleId, matchedSite: name });
+      } else {
+        await this.audio.addAppSource({ bundleId });
+      }
+      log.info("watched app running", { bundleId, name, kind });
     });
-    this.appWatcher.on("deactivate", async (bundleId) => {
-      await this.audio.removeAppSource({ bundleId });
-    });
-
-    this.tabPoller.on("activate", async ({ bundleId, matchedSite }) => {
-      await this.audio.addBrowserSource({ bundleId, matchedSite });
-    });
-    this.tabPoller.on("deactivate", async ({ bundleId }) => {
-      await this.audio.removeBrowserSource({ bundleId });
+    this.appWatcher.on("deactivate", async (bundleId, kind) => {
+      if (kind === "browser") {
+        await this.audio.removeBrowserSource({ bundleId });
+      } else {
+        await this.audio.removeAppSource({ bundleId });
+      }
     });
   }
 
@@ -135,14 +133,12 @@ class Application {
     await this.audio.addMicSource();
     if (this.prefs.get().automationGranted) {
       this.appWatcher.start();
-      this.tabPoller.start();
     }
     refreshTrayMenu(true);
     sendEvent({ type: "listening:changed", payload: { enabled: true } });
   }
 
   private async disableListening(): Promise<void> {
-    this.tabPoller.stop();
     this.appWatcher.stop();
     this.audio.setListeningActive(false);
     await this.audio.stop();
@@ -169,10 +165,8 @@ class Application {
     handle<"preferences:set">("preferences:set", async (patch) => {
       const next = await this.prefs.update(patch);
       this.appWatcher.refreshWhitelist();
-      this.tabPoller.refreshWhitelist();
       if (patch.automationGranted && this.prefs.get().listeningEnabled) {
         this.appWatcher.start();
-        this.tabPoller.start();
       }
       return next;
     });
@@ -238,10 +232,6 @@ class Application {
       try {
         await this.models.download(id, (ev) => {
           sendEvent({ type: "models:download:progress", payload: ev });
-          log.info("model download progress", {
-            id: ev.id,
-            pct: ev.totalBytes > 0 ? Math.round((ev.receivedBytes / ev.totalBytes) * 100) : 0,
-          });
         });
         return { ok: true as const };
       } catch (err) {

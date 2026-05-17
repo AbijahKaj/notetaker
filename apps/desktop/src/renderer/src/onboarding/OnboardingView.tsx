@@ -5,7 +5,16 @@ import { MicVuMeter } from "../components/MicVuMeter";
 
 type Step = "welcome" | "permissions" | "apps" | "sites" | "models" | "llm" | "test" | "done";
 
+type ModelPhase = "downloading" | "extracting" | "finishing" | "done";
+
 const STEPS: Step[] = ["welcome", "permissions", "apps", "sites", "models", "llm", "test", "done"];
+
+const MODEL_PHASE_LABEL: Record<ModelPhase, string> = {
+  downloading: "Downloading",
+  extracting: "Extracting",
+  finishing: "Installing",
+  done: "Installed",
+};
 
 interface OnboardingViewProps {
   onComplete: () => void;
@@ -23,6 +32,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const [newSite, setNewSite] = useState("");
   const [models, setModels] = useState<{ id: string; required: boolean; installed: boolean; sizeBytes: number }[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
+  const [modelPhases, setModelPhases] = useState<Record<string, ModelPhase>>({});
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("anthropic");
   const [apiKey, setApiKey] = useState("");
@@ -46,10 +56,18 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
     void api().invoke("window:setKeepVisible", true);
     const unsub = api().on((evt) => {
       if (evt.type === "models:download:progress") {
-        const pct = evt.payload.totalBytes > 0
-          ? evt.payload.receivedBytes / evt.payload.totalBytes
-          : 0;
-        setDownloadProgress((prev) => ({ ...prev, [evt.payload.id]: pct }));
+        const { id, phase, receivedBytes, totalBytes } = evt.payload;
+        setModelPhases((prev) => ({ ...prev, [id]: phase }));
+        if (phase === "downloading" && receivedBytes !== undefined && totalBytes) {
+          setDownloadProgress((prev) => ({
+            ...prev,
+            [id]: totalBytes > 0 ? receivedBytes / totalBytes : 0,
+          }));
+        }
+        if (phase === "done") {
+          setDownloadProgress((prev) => ({ ...prev, [id]: 1 }));
+          void api().invoke("models:status").then(setModels);
+        }
       }
     });
     return () => {
@@ -153,16 +171,23 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
       for (const m of required) {
         setDownloadingId(m.id);
         setDownloadProgress((prev) => ({ ...prev, [m.id]: 0 }));
+        setModelPhases((prev) => ({ ...prev, [m.id]: "downloading" }));
         try {
           await api().invoke("models:download", m.id);
+          setModelPhases((prev) => ({ ...prev, [m.id]: "done" }));
           setDownloadProgress((prev) => ({ ...prev, [m.id]: 1 }));
+          const updated = await api().invoke("models:status");
+          setModels(updated);
         } catch (err) {
-          setDownloadError(`Failed to download ${m.id}. Check your connection and try again. (${String(err)})`);
+          setDownloadError(`Failed on ${m.id}. Check your connection and try again. (${String(err)})`);
+          setModelPhases((prev) => {
+            const next = { ...prev };
+            delete next[m.id];
+            return next;
+          });
           return;
         }
       }
-      const updated = await api().invoke("models:status");
-      setModels(updated);
       await api().invoke("window:show");
     } finally {
       setDownloadingId(null);
@@ -192,11 +217,59 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
 
   const requiredModels = models.filter((m) => m.required);
   const requiredPending = requiredModels.filter((m) => !m.installed);
+
+  const modelContribution = (m: (typeof models)[number]) => {
+    if (m.installed) return 1;
+    const phase = modelPhases[m.id];
+    const pct = downloadProgress[m.id] ?? 0;
+    if (phase === "done") return 1;
+    if (phase === "extracting") return 0.92;
+    if (phase === "finishing") return 0.98;
+    if (phase === "downloading") return pct * 0.9;
+    return 0;
+  };
+
   const overallProgress = requiredModels.length > 0
-    ? requiredModels.reduce((sum, m) => sum + (downloadProgress[m.id] ?? (m.installed ? 1 : 0)), 0) / requiredModels.length
+    ? requiredModels.reduce((sum, m) => sum + modelContribution(m), 0) / requiredModels.length
     : 1;
 
   const formatPct = (pct: number) => `${Math.round(pct * 100)}%`;
+
+  const activePhase = downloadingId ? modelPhases[downloadingId] : undefined;
+
+  const activeStatusLabel = (() => {
+    if (!downloadingId) return "Preparing download…";
+    const phase = activePhase ?? "downloading";
+    const name = downloadingId;
+    if (phase === "extracting") {
+      return `Extracting ${name}… (large archives can take up to a minute)`;
+    }
+    if (phase === "finishing") return `Installing ${name}…`;
+    if (phase === "downloading") {
+      const pct = formatPct(downloadProgress[downloadingId] ?? 0);
+      return `Downloading ${name}… ${pct}`;
+    }
+    if (phase === "done") return `${name} ready`;
+    return `Working on ${name}…`;
+  })();
+
+  const modelBadge = (m: (typeof models)[number]) => {
+    if (m.installed) return <span className="badge badge-success">Installed</span>;
+    const phase = modelPhases[m.id];
+    if (phase === "extracting") {
+      return <span className="badge badge-muted">Extracting…</span>;
+    }
+    if (phase === "finishing") {
+      return <span className="badge badge-muted">Installing…</span>;
+    }
+    if (phase === "downloading") {
+      return <span className="badge badge-muted">{formatPct(downloadProgress[m.id] ?? 0)}</span>;
+    }
+    if (phase === "done") {
+      return <span className="badge badge-success">Installed</span>;
+    }
+    return <span className="badge badge-muted">{Math.round(m.sizeBytes / 1_000_000)} MB</span>;
+  };
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 }}>
@@ -347,50 +420,60 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
 
             {downloading && (
               <div className="card" style={{ marginBottom: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
-                  <span>
-                    {downloadingId
-                      ? `Downloading ${downloadingId}…`
-                      : downloading
-                        ? "Preparing download…"
-                        : "Overall progress"}
-                  </span>
-                  <span style={{ color: "var(--text-muted)" }}>{formatPct(overallProgress)}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13, gap: 12 }}>
+                  <span>{activeStatusLabel}</span>
+                  <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>{formatPct(overallProgress)}</span>
                 </div>
                 <div className="progress-bar">
-                  <div className="progress-bar-fill" style={{ width: `${overallProgress * 100}%` }} />
+                  <div
+                    className={`progress-bar-fill${activePhase === "extracting" ? " progress-bar-fill-pulse" : ""}`}
+                    style={{ width: `${overallProgress * 100}%` }}
+                  />
                 </div>
               </div>
             )}
 
             {models.map((m) => {
               const progress = downloadProgress[m.id];
+              const phase = modelPhases[m.id];
               const isActive = downloadingId === m.id;
-              const showProgress = progress !== undefined && progress < 1;
+              const showDownloadBar = phase === "downloading" && progress !== undefined;
+              const showExtractBar = phase === "extracting" || phase === "finishing";
 
               return (
                 <div key={m.id} className="whitelist-item" style={{ flexDirection: "column", alignItems: "stretch" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span>{m.id}</span>
-                    {m.installed ? (
-                      <span className="badge badge-success">Installed</span>
-                    ) : isActive ? (
-                      <span className="badge badge-muted">{formatPct(progress ?? 0)}</span>
-                    ) : (
-                      <span className="badge badge-muted">{Math.round(m.sizeBytes / 1_000_000)} MB</span>
-                    )}
+                    {modelBadge(m)}
                   </div>
-                  {showProgress && (
+                  {isActive && phase && phase !== "done" && (
+                    <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--text-muted)" }}>
+                      {MODEL_PHASE_LABEL[phase]}
+                      {phase === "downloading" ? ` ${formatPct(progress ?? 0)}` : "…"}
+                    </p>
+                  )}
+                  {showDownloadBar && (
                     <div className="progress-bar" style={{ marginTop: 8 }}>
                       <div className="progress-bar-fill" style={{ width: `${(progress ?? 0) * 100}%` }} />
                     </div>
+                  )}
+                  {showExtractBar && (
+                    <div className="progress-bar progress-bar-indeterminate" style={{ marginTop: 8 }} />
                   )}
                 </div>
               );
             })}
             <div className="onboarding-actions">
               <button className="btn btn-ghost" onClick={downloadRequiredModels} disabled={downloading || requiredPending.length === 0}>
-                {downloading ? "Downloading…" : requiredPending.length === 0 ? "All required installed" : "Download required"}
+                {downloading
+                  ? activePhase === "extracting"
+                    ? "Extracting…"
+                    : activePhase === "finishing"
+                      ? "Installing…"
+                      : "Downloading…"
+                  : requiredPending.length === 0
+                    ? "All required installed"
+                    : "Download required"}
               </button>
               <button
                 className="btn btn-primary"

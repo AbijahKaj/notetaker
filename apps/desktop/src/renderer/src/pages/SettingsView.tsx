@@ -137,29 +137,29 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
 
       <div className="card">
         <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Behavior</h2>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <label className="settings-toggle">
           <input
             type="checkbox"
             checked={prefs.launchAtLogin}
             onChange={(e) => update({ launchAtLogin: e.target.checked })}
           />
-          Launch at login
+          <span>Launch at login</span>
         </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <label className="settings-toggle">
           <input
             type="checkbox"
             checked={prefs.liveTranscript}
             onChange={(e) => update({ liveTranscript: e.target.checked })}
           />
-          Show live transcript
+          <span>Show live transcript</span>
         </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <label className="settings-toggle">
           <input
             type="checkbox"
             checked={prefs.encryptDb}
             onChange={(e) => update({ encryptDb: e.target.checked })}
           />
-          Encrypt local database
+          <span>Encrypt local database</span>
         </label>
       </div>
     </div>
