@@ -39,6 +39,10 @@ export class SpeechService extends TypedEmitter<PipelineEvents> {
     this.engine?.setSessionId(sessionId);
   }
 
+  setTimelineOrigin(ms: number): void {
+    this.engine?.setTimelineOrigin(ms);
+  }
+
   feed(frame: PcmFrame): void {
     this.engine?.feed(frame);
   }

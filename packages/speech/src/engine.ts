@@ -11,10 +11,11 @@ import {
 } from "@notetaker/core";
 import type { ModelPaths } from "./models.js";
 import {
+  createDiarizer,
   createParakeetRecognizer,
   createSileroVad,
   importSherpa,
-  tryCreateDiarizer,
+  type DiarizationTurn,
 } from "./sherpa-bindings.js";
 
 const log = createLogger("speech");
@@ -51,6 +52,7 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
   private sherpa: SherpaModules | null = null;
   private sttQueue: SpeechSegment[] = [];
   private sttProcessing = false;
+  private timelineOriginMs = 0;
 
   constructor(opts: SpeechEngineOptions) {
     super();
@@ -59,6 +61,7 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
 
   async start(): Promise<void> {
     if (this.running) return;
+    if (this.timelineOriginMs === 0) this.timelineOriginMs = Date.now();
     try {
       this.sherpa = await loadSherpa(this.opts.modelPaths);
       this.running = true;
@@ -75,7 +78,12 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
     this.vadStates.clear();
     this.sttQueue = [];
     this.sherpa = null;
+    this.timelineOriginMs = 0;
     log.info("speech engine stopped");
+  }
+
+  setTimelineOrigin(ms: number): void {
+    this.timelineOriginMs = ms;
   }
 
   setSessionId(sessionId: string): void {
@@ -152,10 +160,11 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
       state.silentWindows = 0;
       return;
     }
+    const origin = this.timelineOriginMs || frame.tsMs;
     const segment: SpeechSegment = {
       sourceId: frame.sourceId,
-      startMs: state.speechStartMs - VAD_PRE_SPEECH_PAD_MS,
-      endMs: frame.tsMs + VAD_REDEMPTION_MS,
+      startMs: Math.max(0, state.speechStartMs - origin - VAD_PRE_SPEECH_PAD_MS),
+      endMs: Math.max(0, frame.tsMs - origin + VAD_REDEMPTION_MS),
       pcm,
       sampleRate: frame.sampleRate,
     };
@@ -204,29 +213,43 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
 
   private async transcribe(segment: SpeechSegment): Promise<TranscriptSegment[]> {
     const lang = await this.detectLanguage(segment.pcm);
-    const text = (await this.runStt(segment.pcm)).trim();
-    if (!text) return [];
 
-    const speakers = await this.diarize(segment.pcm, text);
-
-    if (speakers.length === 0) {
-      return [this.makeTranscriptSegment(segment, "S1", text, lang)];
+    if (this.sherpa?.diarizer) {
+      const turns = this.sherpa.diarizer.process(segment.pcm);
+      if (turns.length > 1) {
+        const multi = await this.transcribeDiarizedTurns(segment, turns, lang);
+        if (multi.length > 0) return multi;
+      }
     }
 
-    return speakers
-      .map((sp, i) => {
-        const line = (sp.text || (i === 0 ? text : "")).trim();
-        if (!line) return null;
-        return this.makeTranscriptSegment(
+    const text = (await this.runStt(segment.pcm)).trim();
+    if (!text) return [];
+    return [this.makeTranscriptSegment(segment, "S1", text, lang)];
+  }
+
+  private async transcribeDiarizedTurns(
+    segment: SpeechSegment,
+    turns: DiarizationTurn[],
+    lang: string,
+  ): Promise<TranscriptSegment[]> {
+    const out: TranscriptSegment[] = [];
+    for (const turn of turns) {
+      const slice = slicePcm(segment.pcm, turn.startSec, turn.endSec);
+      if (slice.length < MIN_STT_SAMPLES) continue;
+      const text = (await this.runStt(slice)).trim();
+      if (!text) continue;
+      out.push(
+        this.makeTranscriptSegment(
           segment,
-          sp.speakerId,
-          line,
+          turn.speakerId,
+          text,
           lang,
-          sp.startMs,
-          sp.endMs,
-        );
-      })
-      .filter((seg): seg is TranscriptSegment => seg !== null);
+          segment.startMs + turn.startSec * 1000,
+          segment.startMs + turn.endSec * 1000,
+        ),
+      );
+    }
+    return out;
   }
 
   private makeTranscriptSegment(
@@ -278,34 +301,13 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
     return `[transcription pending — install models via pnpm models:download]`;
   }
 
-  private async diarize(
-    pcm: Float32Array,
-    text: string,
-  ): Promise<{ speakerId: string; text: string; startMs?: number; endMs?: number }[]> {
-    if (this.sherpa?.diarizer) {
-      try {
-        const result = this.sherpa.diarizer.process(pcm) as DiarizeResult[];
-        if (result.length > 0) return result;
-      } catch (err) {
-        log.warn("diarization error", { err: String(err) });
-      }
-    }
-    return [{ speakerId: "S1", text }];
-  }
-}
-
-interface DiarizeResult {
-  speakerId: string;
-  text: string;
-  startMs?: number;
-  endMs?: number;
 }
 
 interface SherpaModules {
   vad?: { acceptWaveform: (pcm: Float32Array) => void; isDetected: () => boolean };
   parakeet?: { transcribe: (pcm: Float32Array) => string };
   langId?: { detect: (pcm: Float32Array) => string };
-  diarizer?: { process: (pcm: Float32Array) => DiarizeResult[] };
+  diarizer?: { process: (pcm: Float32Array) => DiarizationTurn[] };
 }
 
 async function loadSherpa(paths: ModelPaths): Promise<SherpaModules | null> {
@@ -333,7 +335,13 @@ async function loadSherpa(paths: ModelPaths): Promise<SherpaModules | null> {
     }
 
     const diarizer =
-      existsSync(paths.diarization) ? tryCreateDiarizer(sherpa, paths.diarization) ?? undefined : undefined;
+      existsSync(paths.diarizationSegmentation) && existsSync(paths.diarizationEmbedding)
+        ? createDiarizer(sherpa, paths.diarizationSegmentation, paths.diarizationEmbedding) ?? undefined
+        : undefined;
+
+    if (!diarizer) {
+      log.warn("speaker diarization unavailable (need pyannote segmentation + nemo embedding models)");
+    }
 
     return { ...(vad ? { vad } : {}), parakeet, diarizer };
   } catch (err) {
@@ -347,6 +355,13 @@ function rmsEnergy(pcm: Float32Array): number {
   let sum = 0;
   for (const s of pcm) sum += s * s;
   return Math.sqrt(sum / pcm.length);
+}
+
+function slicePcm(pcm: Float32Array, startSec: number, endSec: number): Float32Array {
+  const start = Math.max(0, Math.floor(startSec * SAMPLE_RATE));
+  const end = Math.min(pcm.length, Math.ceil(endSec * SAMPLE_RATE));
+  if (end <= start) return new Float32Array(0);
+  return pcm.subarray(start, end);
 }
 
 function concatFloat32(chunks: Float32Array[]): Float32Array {

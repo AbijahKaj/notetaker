@@ -11,6 +11,7 @@ export interface ModelCatalogEntry {
 }
 
 const RELEASE = "https://github.com/k2-fsa/sherpa-onnx/releases/download";
+const RELEASE_SPEAKER = `${RELEASE}/speaker-recongition-models`;
 
 export const MODEL_CATALOG: ModelCatalogEntry[] = [
   {
@@ -36,6 +37,14 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
     url: `${RELEASE}/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2`,
     installPath: "sherpa-onnx-pyannote-segmentation-3-0",
     archive: true,
+  },
+  {
+    id: "speaker-embedding",
+    required: true,
+    sizeBytes: 25_000_000,
+    url: `${RELEASE_SPEAKER}/nemo_en_titanet_small.onnx`,
+    installPath: "nemo_en_titanet_small.onnx",
+    archive: false,
   },
   {
     id: "llama-3.2-3b-mlx",

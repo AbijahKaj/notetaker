@@ -138,9 +138,13 @@ class Application {
       }
     }
 
+    const listenStartedAt = Date.now();
     this.audio.setListeningActive(true);
+    this.sessions.beginListeningSession(listenStartedAt);
+
     await this.audio.start();
     await this.speech.start();
+    this.speech.setTimelineOrigin(listenStartedAt);
     await this.audio.addMicSource();
     if (this.prefs.get().automationGranted) {
       this.appWatcher.start();

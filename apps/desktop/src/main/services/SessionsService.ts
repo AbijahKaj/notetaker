@@ -38,6 +38,35 @@ export class SessionsService extends TypedEmitter<Pick<PipelineEvents, "session:
     }
   }
 
+  /** Opens a session when listening starts so timestamps align with the audio timeline. */
+  beginListeningSession(startedAt: number): Session {
+    if (this.activeSessionId) {
+      const existing = this.storage.getDb().getSession(this.activeSessionId);
+      if (existing) return existing;
+    }
+
+    const open = this.storage.getDb().getOpenSession();
+    if (open) {
+      this.activeSessionId = open.id;
+      this.sessionEpochMs = open.startedAt;
+      this.startIdleTimer();
+      return open;
+    }
+
+    const session = this.storage.getDb().createSession({
+      appContext: "listening",
+      startedAt,
+    });
+    this.activeSessionId = session.id;
+    this.sessionEpochMs = startedAt;
+    this.lastActivityMs = Date.now();
+    this.speech?.setSessionId(session.id);
+    this.startIdleTimer();
+    this.emit("session:opened", session);
+    log.info("session opened for listening", { id: session.id });
+    return session;
+  }
+
   async absorbSegment(seg: Omit<TranscriptSegment, "id" | "sessionId">): Promise<TranscriptSegment | null> {
     const text = seg.text.trim();
     if (!text) return null;
@@ -48,8 +77,8 @@ export class SessionsService extends TypedEmitter<Pick<PipelineEvents, "session:
       text,
       id: newSegmentId(),
       sessionId,
-      startMs: Math.max(0, seg.startMs - this.sessionEpochMs),
-      endMs: Math.max(0, seg.endMs - this.sessionEpochMs),
+      startMs: normalizeTimelineMs(seg.startMs, this.sessionEpochMs),
+      endMs: normalizeTimelineMs(seg.endMs, this.sessionEpochMs),
     };
     this.storage.getDb().insertSegment(full);
     this.lastActivityMs = Date.now();
@@ -57,7 +86,13 @@ export class SessionsService extends TypedEmitter<Pick<PipelineEvents, "session:
   }
 
   private async ensureActiveSession(sourceId: string): Promise<string> {
-    if (this.activeSessionId) return this.activeSessionId;
+    if (this.activeSessionId) {
+      if (!this.sessionEpochMs) {
+        const s = this.storage.getDb().getSession(this.activeSessionId);
+        if (s) this.sessionEpochMs = s.startedAt;
+      }
+      return this.activeSessionId;
+    }
 
     const open = this.storage.getDb().getOpenSession();
     if (open) {
@@ -140,4 +175,10 @@ export class SessionsService extends TypedEmitter<Pick<PipelineEvents, "session:
   getActiveSessionId(): string | null {
     return this.activeSessionId;
   }
+}
+
+/** Values from the sidecar are epoch ms; speech engine uses ms since listen start. */
+function normalizeTimelineMs(ms: number, sessionEpochMs: number): number {
+  if (ms > 1e12 && sessionEpochMs > 0) return Math.max(0, ms - sessionEpochMs);
+  return Math.max(0, ms);
 }

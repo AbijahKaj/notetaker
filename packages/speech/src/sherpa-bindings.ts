@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { createLogger } from "@notetaker/core";
@@ -17,9 +18,22 @@ export type SherpaModule = {
     getResult: (stream: unknown) => { text?: string };
   };
   OfflineSpeakerDiarization?: new (config: Record<string, unknown>) => {
-    process: (pcm: Float32Array) => { segments?: { speakerId?: string; text?: string; startMs?: number; endMs?: number }[] };
+    process: (samples: Float32Array) => DiarizationSegmentRaw[];
   };
 };
+
+/** Sherpa returns start/end in seconds and speaker as integer index. */
+export interface DiarizationSegmentRaw {
+  start: number;
+  end: number;
+  speaker: number;
+}
+
+export interface DiarizationTurn {
+  speakerId: string;
+  startSec: number;
+  endSec: number;
+}
 
 export async function importSherpa(): Promise<SherpaModule> {
   const mod = (await import("sherpa-onnx-node")) as unknown as { default?: SherpaModule } & SherpaModule;
@@ -73,19 +87,17 @@ export function createParakeetRecognizer(
   const joiner = findModelFile(modelDir, /joiner.*\.onnx$/i);
   if (!encoder || !decoder || !joiner) throw new Error(`incomplete parakeet model in ${modelDir}`);
 
-  const modelConfig: Record<string, unknown> = {
-    transducer: {
-      encoder: join(modelDir, encoder),
-      decoder: join(modelDir, decoder),
-      joiner: join(modelDir, joiner),
-    },
-    tokens: join(modelDir, tokens),
-    numThreads: 4,
-  };
-
   const recognizer = new sherpa.OfflineRecognizer({
     featConfig: { sampleRate: 16_000, featureDim: 80 },
-    modelConfig,
+    modelConfig: {
+      transducer: {
+        encoder: join(modelDir, encoder),
+        decoder: join(modelDir, decoder),
+        joiner: join(modelDir, joiner),
+      },
+      tokens: join(modelDir, tokens),
+      numThreads: 4,
+    },
   });
 
   return {
@@ -93,36 +105,55 @@ export function createParakeetRecognizer(
       const stream = recognizer.createStream();
       stream.acceptWaveform({ samples: pcm, sampleRate: 16_000 });
       recognizer.decode(stream);
-      const result = recognizer.getResult(stream);
-      return result?.text?.trim() ?? "";
+      return recognizer.getResult(stream)?.text?.trim() ?? "";
     },
   };
 }
 
-export function tryCreateDiarizer(
+export function createDiarizer(
   sherpa: SherpaModule,
-  modelDir: string,
-): { process: (pcm: Float32Array) => { speakerId: string; text: string; startMs?: number; endMs?: number }[] } | null {
-  if (!sherpa.OfflineSpeakerDiarization) return null;
+  segmentationDir: string,
+  embeddingModelPath: string,
+): { process: (pcm: Float32Array) => DiarizationTurn[] } | null {
+  if (!sherpa.OfflineSpeakerDiarization) {
+    log.warn("OfflineSpeakerDiarization not available in sherpa-onnx-node");
+    return null;
+  }
+
+  const segFile =
+    findModelFile(segmentationDir, /^model\.int8\.onnx$/i) ??
+    findModelFile(segmentationDir, /^model\.onnx$/i);
+  if (!segFile) {
+    log.warn("pyannote segmentation model not found", { segmentationDir });
+    return null;
+  }
+  if (!existsSync(embeddingModelPath)) {
+    log.warn("speaker embedding model not found", { embeddingModelPath });
+    return null;
+  }
+
   try {
-    const segmentation = findModelFile(modelDir, /segmentation.*\.onnx$/i);
-    const embedding = findModelFile(modelDir, /embedding.*\.onnx$/i);
-    if (!segmentation || !embedding) return null;
     const instance = new sherpa.OfflineSpeakerDiarization({
-      segmentation: { model: join(modelDir, segmentation) },
-      embedding: { model: join(modelDir, embedding) },
-      clustering: { numClusters: -1 },
-      minDurationOn: 0.2,
-      minDurationOff: 0.5,
+      segmentation: {
+        pyannote: { model: join(segmentationDir, segFile) },
+        numThreads: 1,
+      },
+      embedding: {
+        model: embeddingModelPath,
+        numThreads: 1,
+      },
+      clustering: { threshold: 0.5 },
+      minDurationOn: 0.25,
+      minDurationOff: 0.4,
     });
+
     return {
       process: (pcm) => {
-        const result = instance.process(pcm);
-        return (result?.segments ?? []).map((s, i) => ({
-          speakerId: s.speakerId ?? `S${i + 1}`,
-          text: s.text ?? "",
-          startMs: s.startMs,
-          endMs: s.endMs,
+        const raw = instance.process(pcm);
+        return raw.map((s) => ({
+          speakerId: `S${(s.speaker ?? 0) + 1}`,
+          startSec: s.start,
+          endSec: s.end,
         }));
       },
     };
