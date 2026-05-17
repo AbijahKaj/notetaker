@@ -20,7 +20,32 @@ export type SherpaModule = {
   OfflineSpeakerDiarization?: new (config: Record<string, unknown>) => {
     process: (samples: Float32Array) => DiarizationSegmentRaw[];
   };
+  SpeakerEmbeddingExtractor?: new (config: Record<string, unknown>) => {
+    dim: number;
+    createStream: () => {
+      acceptWaveform: (wave: { samples: Float32Array; sampleRate: number }) => void;
+      inputFinished: () => void;
+    };
+    isReady: (stream: {
+      acceptWaveform: (wave: { samples: Float32Array; sampleRate: number }) => void;
+      inputFinished: () => void;
+    }) => boolean;
+    compute: (stream: {
+      acceptWaveform: (wave: { samples: Float32Array; sampleRate: number }) => void;
+      inputFinished: () => void;
+    }) => Float32Array;
+  };
+  SpeakerEmbeddingManager?: new (dim: number) => {
+    add: (obj: { name: string; v: Float32Array }) => boolean;
+    search: (obj: { v: Float32Array; threshold: number }) => string;
+    getNumSpeakers: () => number;
+  };
 };
+
+export interface SpeakerRegistry {
+  resolveSpeaker: (pcm: Float32Array) => string;
+  reset: () => void;
+}
 
 /** Sherpa returns start/end in seconds and speaker as integer index. */
 export interface DiarizationSegmentRaw {
@@ -142,7 +167,7 @@ export function createDiarizer(
         model: embeddingModelPath,
         numThreads: 1,
       },
-      clustering: { threshold: 0.5 },
+      clustering: { threshold: 0.42 },
       minDurationOn: 0.25,
       minDurationOff: 0.4,
     });
@@ -159,6 +184,64 @@ export function createDiarizer(
     };
   } catch (err) {
     log.warn("diarizer init failed", { err: String(err) });
+    return null;
+  }
+}
+
+const SPEAKER_MATCH_THRESHOLD = 0.55;
+
+export function createSpeakerRegistry(
+  sherpa: SherpaModule,
+  embeddingModelPath: string,
+): SpeakerRegistry | null {
+  if (!sherpa.SpeakerEmbeddingExtractor || !sherpa.SpeakerEmbeddingManager) {
+    log.warn("SpeakerEmbeddingExtractor not available in sherpa-onnx-node");
+    return null;
+  }
+  if (!existsSync(embeddingModelPath)) {
+    log.warn("speaker embedding model not found", { embeddingModelPath });
+    return null;
+  }
+
+  try {
+    let nextId = 1;
+    let extractor = new sherpa.SpeakerEmbeddingExtractor({
+      model: embeddingModelPath,
+      numThreads: 1,
+    });
+    let manager = new sherpa.SpeakerEmbeddingManager(extractor.dim);
+
+    const embed = (pcm: Float32Array): Float32Array => {
+      const stream = extractor.createStream();
+      stream.acceptWaveform({ samples: pcm, sampleRate: 16_000 });
+      stream.inputFinished();
+      while (!extractor.isReady(stream)) {
+        // synchronous native loop
+      }
+      return extractor.compute(stream);
+    };
+
+    return {
+      resolveSpeaker(pcm: Float32Array) {
+        if (pcm.length < 1600) return "S1";
+        const embedding = embed(pcm);
+        const matched = manager.search({ v: embedding, threshold: SPEAKER_MATCH_THRESHOLD });
+        if (matched) return matched;
+        const id = `S${nextId++}`;
+        manager.add({ name: id, v: embedding });
+        return id;
+      },
+      reset() {
+        nextId = 1;
+        const Extractor = sherpa.SpeakerEmbeddingExtractor;
+        const Manager = sherpa.SpeakerEmbeddingManager;
+        if (!Extractor || !Manager) return;
+        extractor = new Extractor({ model: embeddingModelPath, numThreads: 1 });
+        manager = new Manager(extractor.dim);
+      },
+    };
+  } catch (err) {
+    log.warn("speaker registry init failed", { err: String(err) });
     return null;
   }
 }

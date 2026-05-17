@@ -58,7 +58,13 @@ export function SessionView({ session, segments, listening, onNotesChange, onSes
           <textarea
             value={notes}
             onChange={(e) => handleNotesChange(e.target.value)}
-            placeholder={session ? "Take rough notes during the meeting…" : "Start listening to begin a session…"}
+            placeholder={
+              session
+                ? "Take rough notes during the meeting…"
+                : listening
+                  ? "Listening — notes save when speech starts a session…"
+                  : "Press Start in the sidebar to begin listening…"
+            }
             disabled={!session}
             style={{ flex: 1, minHeight: 0 }}
           />
@@ -69,7 +75,11 @@ export function SessionView({ session, segments, listening, onNotesChange, onSes
             Live Transcript
           </h2>
           <div style={{ flex: 1, overflowY: "auto" }}>
-            <TranscriptPanel segments={segments} />
+            <TranscriptPanel
+              segments={segments}
+              sessionStartedAt={session?.startedAt}
+              listening={listening}
+            />
           </div>
         </div>
       </div>

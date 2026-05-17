@@ -2,6 +2,10 @@ import type { TranscriptSegment } from "@notetaker/core";
 
 interface TranscriptPanelProps {
   segments: TranscriptSegment[];
+  /** Wall-clock anchor for the session (epoch ms). */
+  sessionStartedAt?: number;
+  /** When false, show paused state instead of "waiting for speech". */
+  listening?: boolean;
   /** Ms after which a new utterance starts a new line (default 4s). */
   mergeGapMs?: number;
 }
@@ -15,11 +19,22 @@ interface MergedLine {
   text: string;
 }
 
-function formatMs(ms: number): string {
+function formatRelativeMs(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function formatTimestamp(sessionStartedAt: number | undefined, relativeMs: number): string {
+  const relative = formatRelativeMs(relativeMs);
+  if (!sessionStartedAt) return relative;
+  const wall = new Date(sessionStartedAt + relativeMs).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  return `${wall} (${relative})`;
 }
 
 /** Combine nearby same-speaker chunks into readable paragraphs. */
@@ -52,13 +67,25 @@ function mergeForDisplay(segments: TranscriptSegment[], mergeGapMs: number): Mer
   return lines;
 }
 
-export function TranscriptPanel({ segments, mergeGapMs = 4_000 }: TranscriptPanelProps) {
+function emptyTranscriptMessage(listening: boolean): string {
+  if (!listening) {
+    return "Listening is paused. Press Start in the sidebar to transcribe.";
+  }
+  return "Waiting for speech…";
+}
+
+export function TranscriptPanel({
+  segments,
+  sessionStartedAt,
+  listening = false,
+  mergeGapMs = 4_000,
+}: TranscriptPanelProps) {
   const lines = mergeForDisplay(segments, mergeGapMs);
 
   if (lines.length === 0) {
     return (
       <p style={{ color: "var(--text-muted)", fontSize: 13, padding: "16px 0" }}>
-        Waiting for speech…
+        {emptyTranscriptMessage(listening)}
       </p>
     );
   }
@@ -67,7 +94,7 @@ export function TranscriptPanel({ segments, mergeGapMs = 4_000 }: TranscriptPane
     <div>
       {lines.map((line) => (
         <div key={line.key} className="transcript-segment">
-          <span className="transcript-time">{formatMs(line.startMs)}</span>
+          <span className="transcript-time">{formatTimestamp(sessionStartedAt, line.startMs)}</span>
           <span className="transcript-speaker">{line.speakerLabel ?? line.speakerId}</span>
           <span className="transcript-text">{line.text}</span>
         </div>
@@ -75,4 +102,3 @@ export function TranscriptPanel({ segments, mergeGapMs = 4_000 }: TranscriptPane
     </div>
   );
 }
-

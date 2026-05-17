@@ -14,8 +14,10 @@ import {
   createDiarizer,
   createParakeetRecognizer,
   createSileroVad,
+  createSpeakerRegistry,
   importSherpa,
   type DiarizationTurn,
+  type SpeakerRegistry,
 } from "./sherpa-bindings.js";
 
 const log = createLogger("speech");
@@ -89,6 +91,7 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
   setSessionId(sessionId: string): void {
     this.opts.sessionId = sessionId;
     this.sessionLang = null;
+    this.sherpa?.speakerRegistry?.reset();
   }
 
   feed(frame: PcmFrame): void {
@@ -216,7 +219,7 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
 
     if (this.sherpa?.diarizer) {
       const turns = this.sherpa.diarizer.process(segment.pcm);
-      if (turns.length > 1) {
+      if (turns.length > 0) {
         const multi = await this.transcribeDiarizedTurns(segment, turns, lang);
         if (multi.length > 0) return multi;
       }
@@ -224,7 +227,8 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
 
     const text = (await this.runStt(segment.pcm)).trim();
     if (!text) return [];
-    return [this.makeTranscriptSegment(segment, "S1", text, lang)];
+    const speakerId = this.resolveSpeakerId(segment.pcm);
+    return [this.makeTranscriptSegment(segment, speakerId, text, lang)];
   }
 
   private async transcribeDiarizedTurns(
@@ -238,10 +242,11 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
       if (slice.length < MIN_STT_SAMPLES) continue;
       const text = (await this.runStt(slice)).trim();
       if (!text) continue;
+      const speakerId = this.resolveSpeakerId(slice);
       out.push(
         this.makeTranscriptSegment(
           segment,
-          turn.speakerId,
+          speakerId,
           text,
           lang,
           segment.startMs + turn.startSec * 1000,
@@ -250,6 +255,10 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
       );
     }
     return out;
+  }
+
+  private resolveSpeakerId(pcm: Float32Array): string {
+    return this.sherpa?.speakerRegistry?.resolveSpeaker(pcm) ?? "S1";
   }
 
   private makeTranscriptSegment(
@@ -308,6 +317,7 @@ interface SherpaModules {
   parakeet?: { transcribe: (pcm: Float32Array) => string };
   langId?: { detect: (pcm: Float32Array) => string };
   diarizer?: { process: (pcm: Float32Array) => DiarizationTurn[] };
+  speakerRegistry?: SpeakerRegistry;
 }
 
 async function loadSherpa(paths: ModelPaths): Promise<SherpaModules | null> {
@@ -334,16 +344,32 @@ async function loadSherpa(paths: ModelPaths): Promise<SherpaModules | null> {
       }
     }
 
-    const diarizer =
-      existsSync(paths.diarizationSegmentation) && existsSync(paths.diarizationEmbedding)
-        ? createDiarizer(sherpa, paths.diarizationSegmentation, paths.diarizationEmbedding) ?? undefined
-        : undefined;
+    const hasDiarizationModels =
+      existsSync(paths.diarizationSegmentation) && existsSync(paths.diarizationEmbedding);
 
-    if (!diarizer) {
-      log.warn("speaker diarization unavailable (need pyannote segmentation + nemo embedding models)");
+    const diarizer = hasDiarizationModels
+      ? createDiarizer(sherpa, paths.diarizationSegmentation, paths.diarizationEmbedding) ?? undefined
+      : undefined;
+
+    const speakerRegistry = hasDiarizationModels
+      ? createSpeakerRegistry(sherpa, paths.diarizationEmbedding) ?? undefined
+      : undefined;
+
+    if (!hasDiarizationModels) {
+      log.warn("speaker diarization models missing", {
+        segmentation: paths.diarizationSegmentation,
+        embedding: paths.diarizationEmbedding,
+      });
+    } else if (!diarizer && !speakerRegistry) {
+      log.warn("speaker diarization failed to initialize");
+    } else {
+      log.info("speaker diarization ready", {
+        diarizer: Boolean(diarizer),
+        crossUtterance: Boolean(speakerRegistry),
+      });
     }
 
-    return { ...(vad ? { vad } : {}), parakeet, diarizer };
+    return { ...(vad ? { vad } : {}), parakeet, diarizer, speakerRegistry };
   } catch (err) {
     log.warn("failed to load sherpa-onnx-node", { err: String(err) });
     return null;

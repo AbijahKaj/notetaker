@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import type { Preferences, LlmProvider } from "@notetaker/core";
+import { defaultLlmModel, llmModelPlaceholder } from "@notetaker/core/llm-defaults";
 import { api } from "../desktop";
 
 interface SettingsViewProps {
@@ -109,7 +110,10 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
         <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>LLM Provider</h2>
         <select
           value={prefs.llmProvider}
-          onChange={(e) => update({ llmProvider: e.target.value as LlmProvider })}
+          onChange={(e) => {
+            const llmProvider = e.target.value as LlmProvider;
+            void update({ llmProvider, llmModel: defaultLlmModel(llmProvider) });
+          }}
           style={{ marginBottom: 12 }}
         >
           <option value="anthropic">Anthropic (Claude)</option>
@@ -119,6 +123,28 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
         </select>
         {prefs.llmProvider !== "mlx-local" && (
           <>
+            <label style={{ display: "block", fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>
+              Model
+            </label>
+            <input
+              value={prefs.llmModel}
+              onChange={(e) => setPrefs({ ...prefs, llmModel: e.target.value })}
+              onBlur={() => {
+                const llmModel = prefs.llmModel.trim() || defaultLlmModel(prefs.llmProvider);
+                void update({ llmModel });
+              }}
+              placeholder={llmModelPlaceholder(prefs.llmProvider)}
+              style={{ marginBottom: 8, fontFamily: "var(--mono)", fontSize: 13 }}
+            />
+            {prefs.llmProvider === "openrouter" && (
+              <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>
+                Use OpenRouter model slugs (e.g. <code>anthropic/claude-sonnet-4</code>). Browse IDs at{" "}
+                <a href="https://openrouter.ai/models" target="_blank" rel="noreferrer">
+                  openrouter.ai/models
+                </a>
+                .
+              </p>
+            )}
             <input
               type="password"
               value={apiKey}

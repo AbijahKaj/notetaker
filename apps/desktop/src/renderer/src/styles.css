@@ -120,9 +120,36 @@ textarea {
 .badge-warning { background: #451a03; color: var(--warning); }
 .badge-muted { background: var(--surface2); color: var(--text-muted); }
 
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* macOS hiddenInset traffic lights sit in the top-left; keep title clear of them */
+.titlebar {
+  flex-shrink: 0;
+  height: 52px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 16px 10px 78px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+}
+
+.titlebar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  -webkit-app-region: no-drag;
+}
+
 .app-layout {
   display: flex;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -133,15 +160,8 @@ textarea {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  padding: 16px 0;
-}
-
-.sidebar-logo {
-  padding: 0 16px 16px;
-  font-size: 16px;
-  font-weight: 600;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 8px;
+  padding: 12px 0 16px;
+  -webkit-app-region: no-drag;
 }
 
 .nav-item {
@@ -163,6 +183,7 @@ textarea {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
+  -webkit-app-region: no-drag;
 }
 
 .page-title {
@@ -176,7 +197,7 @@ textarea {
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  margin: 8px 16px 0;
+  margin: 0 16px;
   border-radius: var(--radius);
   background: var(--surface2);
   font-size: 12px;
@@ -238,6 +259,13 @@ textarea {
   background: var(--accent);
   transition: width 0.05s;
   border-radius: 4px;
+}
+
+.onboarding-shell {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  -webkit-app-region: no-drag;
 }
 
 .onboarding-step {

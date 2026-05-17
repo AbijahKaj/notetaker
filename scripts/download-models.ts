@@ -8,16 +8,14 @@
 import { execFile } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync } from "node:fs";
 import { unlink } from "node:fs/promises";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { MODEL_CATALOG } from "@notetaker/core";
+import { defaultDownloadModelsDir } from "@notetaker/core/models-dir";
 
 const execFileAsync = promisify(execFile);
 
-const MODELS_DIR = join(
-  process.env["NOTETAKER_MODELS_DIR"] ?? join(homedir(), "Library/Application Support/notetaker-desktop/models"),
-);
+const MODELS_DIR = defaultDownloadModelsDir();
 
 function installPath(id: string): string {
   const spec = MODEL_CATALOG.find((m) => m.id === id);

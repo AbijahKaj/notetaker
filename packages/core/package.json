@@ -10,6 +10,16 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./models-dir": {
+      "types": "./dist/modelsDir.d.ts",
+      "import": "./dist/modelsDir.js",
+      "default": "./dist/modelsDir.js"
+    },
+    "./llm-defaults": {
+      "types": "./dist/llmDefaults.d.ts",
+      "import": "./dist/llmDefaults.js",
+      "default": "./dist/llmDefaults.js"
     }
   },
   "scripts": {

@@ -93,11 +93,22 @@ export function App() {
   }, []);
 
   if (page === "onboarding" || showOnboarding) {
-    return <OnboardingView onComplete={handleOnboardingComplete} />;
+    return (
+      <div className="app-shell">
+        <header className="titlebar">
+          <span className="titlebar-title">NoteTaker</span>
+        </header>
+        <OnboardingView onComplete={handleOnboardingComplete} />
+      </div>
+    );
   }
 
   return (
-    <div className="app-layout">
+    <div className="app-shell">
+      <header className="titlebar">
+        <span className="titlebar-title">NoteTaker</span>
+      </header>
+      <div className="app-layout">
       <Sidebar
         listening={listening}
         onToggleListening={handleToggleListening}
@@ -136,6 +147,7 @@ export function App() {
         {page === "settings" && <SettingsView onRunSetup={handleRunSetup} />}
         {page === "search" && <SearchView onOpenSession={handleOpenSession} />}
       </main>
+      </div>
     </div>
   );
 }

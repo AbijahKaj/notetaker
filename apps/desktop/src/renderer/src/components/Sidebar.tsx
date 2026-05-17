@@ -21,8 +21,6 @@ export function Sidebar({
 }: SidebarProps) {
   return (
     <aside className="sidebar">
-      <div className="sidebar-logo">NoteTaker</div>
-
       <div className="listening-indicator">
         <div className={`listening-dot ${listening ? "active" : ""}`} />
         <span>{listening ? "Listening" : "Paused"}</span>

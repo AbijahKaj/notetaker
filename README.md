@@ -65,4 +65,4 @@ scripts/
 
 ## Architecture
 
-See [`docs/architecture.md`](docs/architecture.md) and the `.cursor/plans/` file for the full plan.
+See [`docs/architecture.md`](docs/architecture.md) for the full plan.

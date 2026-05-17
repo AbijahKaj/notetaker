@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import type { LlmProvider } from "@notetaker/core";
+import { defaultLlmModel, llmModelPlaceholder } from "@notetaker/core/llm-defaults";
 import { api } from "../desktop";
 import { MicVuMeter } from "../components/MicVuMeter";
 
@@ -35,6 +36,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const [modelPhases, setModelPhases] = useState<Record<string, ModelPhase>>({});
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("anthropic");
+  const [llmModel, setLlmModel] = useState(defaultLlmModel("anthropic"));
   const [apiKey, setApiKey] = useState("");
   const [testDone, setTestDone] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -199,8 +201,16 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
     if (llmProvider !== "mlx-local" && apiKey) {
       await api().invoke("llm:setKey", { provider: llmProvider, apiKey });
     }
-    await api().invoke("preferences:set", { llmProvider });
+    await api().invoke("preferences:set", {
+      llmProvider,
+      llmModel: llmModel.trim() || defaultLlmModel(llmProvider),
+    });
     next();
+  };
+
+  const onLlmProviderChange = (provider: LlmProvider) => {
+    setLlmProvider(provider);
+    setLlmModel(defaultLlmModel(provider));
   };
 
   const runTest = async () => {
@@ -272,7 +282,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   };
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 }}>
+    <div className="onboarding-shell" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
       <div className="onboarding-step">
         <div style={{ display: "flex", gap: 4, marginBottom: 24 }}>
           {STEPS.map((s, i) => (
@@ -490,20 +500,33 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
           <>
             <h1 style={{ fontSize: 20, fontWeight: 600 }}>Summarization</h1>
             <p style={{ color: "var(--text-muted)" }}>Choose how meeting summaries are generated.</p>
-            <select value={llmProvider} onChange={(e) => setLlmProvider(e.target.value as LlmProvider)}>
+            <select value={llmProvider} onChange={(e) => onLlmProviderChange(e.target.value as LlmProvider)}>
               <option value="anthropic">Anthropic Claude (cloud, best quality)</option>
               <option value="openai">OpenAI GPT (cloud)</option>
               <option value="openrouter">OpenRouter (cloud, flexible)</option>
               <option value="mlx-local">Local MLX Llama 3.2 3B (private, offline)</option>
             </select>
             {llmProvider !== "mlx-local" && (
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="API key (optional — can add later in Settings)"
-                style={{ marginTop: 8 }}
-              />
+              <>
+                <input
+                  value={llmModel}
+                  onChange={(e) => setLlmModel(e.target.value)}
+                  placeholder={llmModelPlaceholder(llmProvider)}
+                  style={{ marginTop: 8, fontFamily: "var(--mono)", fontSize: 13 }}
+                />
+                {llmProvider === "openrouter" && (
+                  <p style={{ marginTop: 6, fontSize: 12, color: "var(--text-muted)" }}>
+                    OpenRouter model ID, e.g. <code>anthropic/claude-sonnet-4</code>
+                  </p>
+                )}
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="API key (optional — can add later in Settings)"
+                  style={{ marginTop: 8 }}
+                />
+              </>
             )}
             <div className="onboarding-actions">
               <button className="btn btn-primary" onClick={saveLlm}>Continue</button>

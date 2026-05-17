@@ -4,6 +4,7 @@ import {
   PreferencesSchema,
   DEFAULT_APP_WHITELIST,
   DEFAULT_SITE_WHITELIST,
+  resolveLlmModel,
   type Preferences,
 } from "@notetaker/core";
 
@@ -25,6 +26,11 @@ export class PreferencesService {
     try {
       const raw = await readFile(this.prefsPath, "utf8");
       this.prefs = PreferencesSchema.parse(JSON.parse(raw));
+      const fixedModel = resolveLlmModel(this.prefs.llmProvider, this.prefs.llmModel);
+      if (fixedModel !== this.prefs.llmModel) {
+        this.prefs = { ...this.prefs, llmModel: fixedModel };
+        await this.save();
+      }
     } catch {
       await this.save();
     }

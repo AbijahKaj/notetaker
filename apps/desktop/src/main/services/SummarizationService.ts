@@ -1,5 +1,5 @@
 import { createSummarizer } from "@notetaker/llm";
-import { createLogger, type Session, type LlmProvider } from "@notetaker/core";
+import { createLogger, resolveLlmModel, type Session, type LlmProvider } from "@notetaker/core";
 import type { LlmKeyService } from "./LlmKeyService.js";
 import type { PreferencesService } from "./PreferencesService.js";
 import type { ModelManager } from "./ModelManager.js";
@@ -30,10 +30,12 @@ export class SummarizationService {
 
     const apiKey = provider !== "mlx-local" ? (await this.llmKeys.get(provider)) ?? undefined : undefined;
 
+    const model = resolveLlmModel(provider, prefs.llmModel);
+
     const summarizer = createSummarizer({
       provider,
       apiKey,
-      model: prefs.llmModel,
+      model,
     });
 
     log.info("summarizing session", { id: session.id, provider });
@@ -71,7 +73,12 @@ export class SummarizationService {
 
   async test(provider: LlmProvider) {
     const apiKey = provider !== "mlx-local" ? (await this.llmKeys.get(provider)) ?? "" : "";
-    const summarizer = createSummarizer({ provider, apiKey, model: this.prefs.get().llmModel });
+    const prefs = this.prefs.get();
+    const summarizer = createSummarizer({
+      provider,
+      apiKey,
+      model: resolveLlmModel(provider, prefs.llmModel),
+    });
     return summarizer.test();
   }
 }

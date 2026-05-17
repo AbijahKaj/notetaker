@@ -4,6 +4,7 @@ import { unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { MODEL_CATALOG, createLogger } from "@notetaker/core";
+import { resolveModelsDir } from "@notetaker/core/models-dir";
 
 const execFileAsync = promisify(execFile);
 const log = createLogger("models");
@@ -21,8 +22,11 @@ export class ModelManager {
   private modelsDir: string;
 
   constructor(userDataDir: string) {
-    this.modelsDir = join(userDataDir, "models");
+    this.modelsDir = resolveModelsDir(userDataDir);
     if (!existsSync(this.modelsDir)) mkdirSync(this.modelsDir, { recursive: true });
+    if (this.modelsDir !== join(userDataDir, "models")) {
+      log.info("using models directory", { modelsDir: this.modelsDir });
+    }
   }
 
   getModelsDir(): string {

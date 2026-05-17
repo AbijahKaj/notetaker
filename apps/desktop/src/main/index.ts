@@ -335,9 +335,6 @@ function createTray(): void {
   const image = nativeImage.createEmpty();
   tray = new Tray(image);
   tray.setTitle("○");
-  tray.on("click", () => {
-    application.toggleListening();
-  });
   refreshTrayMenu(false);
 }
 

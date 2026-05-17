@@ -5,3 +5,4 @@ export * from "./events.js";
 export * from "./logger.js";
 export * from "./ipc.js";
 export * from "./modelCatalog.js";
+export * from "./llmDefaults.js";

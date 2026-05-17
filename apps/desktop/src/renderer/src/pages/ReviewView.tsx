@@ -126,7 +126,7 @@ export function ReviewView({ session, onBack, onRenameSpeaker }: ReviewViewProps
 
       <div className="card">
         <h3 style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>Transcript</h3>
-        <TranscriptPanel segments={session.segments} />
+        <TranscriptPanel segments={session.segments} sessionStartedAt={session.startedAt} />
       </div>
 
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
