@@ -37,11 +37,9 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const refreshPermissions = async () => {
     const perms = await api().invoke("permissions:check");
     setMicGranted(perms.microphone === "granted");
-    setAppleEventsGranted(perms.appleEvents === "granted");
   };
 
   useEffect(() => {
-    void refreshPermissions();
     const unsub = api().on((evt) => {
       if (evt.type === "models:download:progress") {
         const pct = evt.payload.totalBytes > 0
@@ -54,7 +52,13 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   }, []);
 
   useEffect(() => {
-    if (step === "permissions") void refreshPermissions();
+    if (step === "permissions") {
+      void (async () => {
+        await refreshPermissions();
+        const prefs = await api().invoke("preferences:get");
+        setAppleEventsGranted(prefs.automationGranted);
+      })();
+    }
     if (step === "apps") {
       void (async () => {
         const detected = await api().invoke("apps:detected");
@@ -85,7 +89,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const requestMic = async () => {
     const granted = await api().invoke("permissions:request", "microphone");
     setMicGranted(granted);
-    await refreshPermissions();
   };
 
   const requestSystemAudio = async () => {
@@ -96,7 +99,9 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const requestAppleEvents = async () => {
     const granted = await api().invoke("permissions:request", "appleEvents");
     setAppleEventsGranted(granted);
-    await refreshPermissions();
+    if (granted) {
+      await api().invoke("preferences:set", { automationGranted: true });
+    }
   };
 
   const toggleApp = (bundleId: string) => {

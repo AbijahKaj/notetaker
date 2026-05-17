@@ -47,13 +47,8 @@ export class PermissionsService {
 
     if (kind === "appleEvents") {
       if (process.platform !== "darwin") return true;
-      const ok = await this.probeAppleEvents();
-      if (!ok) {
-        await shell.openExternal(
-          "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",
-        );
-      }
-      return ok;
+      // Probing triggers the macOS Automation prompt — only call from explicit user action.
+      return this.probeAppleEvents();
     }
 
     return false;

@@ -129,8 +129,10 @@ class Application {
     await this.audio.start();
     await this.speech.start();
     await this.audio.addMicSource();
-    this.appWatcher.start();
-    this.tabPoller.start();
+    if (this.prefs.get().automationGranted) {
+      this.appWatcher.start();
+      this.tabPoller.start();
+    }
     refreshTrayMenu(true);
     sendEvent({ type: "listening:changed", payload: { enabled: true } });
   }
@@ -163,10 +165,14 @@ class Application {
       const next = await this.prefs.update(patch);
       this.appWatcher.refreshWhitelist();
       this.tabPoller.refreshWhitelist();
+      if (patch.automationGranted && this.prefs.get().listeningEnabled) {
+        this.appWatcher.start();
+        this.tabPoller.start();
+      }
       return next;
     });
 
-    handle<"permissions:check">("permissions:check", () => this.permissions.refresh());
+    handle<"permissions:check">("permissions:check", () => this.permissions.check());
     handle<"permissions:request">("permissions:request", async (kind) => this.permissions.request(kind));
 
     handle<"listening:toggle">("listening:toggle", async () => ({ enabled: await this.toggleListening() }));

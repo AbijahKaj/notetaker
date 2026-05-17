@@ -93,6 +93,7 @@ export const PreferencesSchema = z.object({
   autoSessionFromCalendar: z.boolean().default(false),
   idleAutoCloseMs: z.number().int().positive().default(5 * 60 * 1000),
   onboardingCompleted: z.boolean().default(false),
+  automationGranted: z.boolean().default(false),
 });
 
 export type Preferences = z.infer<typeof PreferencesSchema>;

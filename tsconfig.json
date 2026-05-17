@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./apps/desktop" },
+    { "path": "./packages/core" },
+    { "path": "./packages/audio-bridge" },
+    { "path": "./packages/speech" },
+    { "path": "./packages/llm" },
+    { "path": "./packages/storage" }
+  ]
+}

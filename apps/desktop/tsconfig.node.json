@@ -4,7 +4,8 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2022"],
-    "types": ["node"]
+    "types": ["node"],
+    "noEmit": true
   },
-  "include": ["src/main/**/*", "electron-vite.config.ts"]
+  "include": ["src/main/**/*", "src/preload/**/*", "electron.vite.config.ts"]
 }

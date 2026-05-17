@@ -1,12 +1,16 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
-import { EventEmitter } from "node:events";
-import { APP_NAMES, DEFAULT_APP_WHITELIST, createLogger } from "@notetaker/core";
+import { APP_NAMES, TypedEmitter, createLogger } from "@notetaker/core";
 import type { PreferencesService } from "./PreferencesService.js";
 
 const execFileAsync = promisify(execFile);
 const log = createLogger("app-watcher");
+
+type AppWatcherEvents = {
+  activate: [bundleId: string, name: string];
+  deactivate: [bundleId: string];
+};
 
 const APP_PATHS: Record<string, string> = {
   "us.zoom.xos": "/Applications/zoom.us.app",
@@ -17,7 +21,7 @@ const APP_PATHS: Record<string, string> = {
   "com.cisco.webexmeetingsapp": "/Applications/Webex.app",
 };
 
-export class AppWatcherService extends EventEmitter {
+export class AppWatcherService extends TypedEmitter<AppWatcherEvents> {
   private prefs: PreferencesService;
   private interval: ReturnType<typeof setInterval> | null = null;
   private activeApps = new Set<string>();
@@ -52,7 +56,9 @@ export class AppWatcherService extends EventEmitter {
 
   async detectAll(): Promise<{ bundleId: string; name: string; installed: boolean; running: boolean }[]> {
     const whitelist = this.prefs.get().appWhitelist;
-    const running = await this.getRunningApps();
+    const running = this.prefs.get().automationGranted
+      ? await this.getRunningApps()
+      : new Set<string>();
     return whitelist.map((bundleId) => ({
       bundleId,
       name: APP_NAMES[bundleId] ?? bundleId,
