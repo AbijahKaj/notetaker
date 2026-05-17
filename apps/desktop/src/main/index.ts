@@ -24,6 +24,7 @@ let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
 let keepWindowVisible = false;
 let reshowTimer: ReturnType<typeof setTimeout> | null = null;
+let isQuitting = false;
 
 const isDev = !app.isPackaged;
 
@@ -128,6 +129,7 @@ class Application {
   }
 
   private async enableListening(): Promise<void> {
+    this.audio.setListeningActive(true);
     await this.audio.start();
     await this.speech.start();
     await this.audio.addMicSource();
@@ -142,6 +144,7 @@ class Application {
   private async disableListening(): Promise<void> {
     this.tabPoller.stop();
     this.appWatcher.stop();
+    this.audio.setListeningActive(false);
     await this.audio.stop();
     await this.speech.stop();
     await this.sessions.closeActive();
@@ -175,7 +178,24 @@ class Application {
     });
 
     handle<"permissions:check">("permissions:check", () => this.permissions.check());
-    handle<"permissions:request">("permissions:request", async (kind) => this.permissions.request(kind));
+    handle<"permissions:request">("permissions:request", async (kind) => {
+      if (kind === "systemAudio") {
+        const probe = await this.audio.probeSystemAudioCapture();
+        if (!probe.ok) {
+          log.warn("system audio probe", { message: probe.message });
+        }
+        await this.permissions.openSystemAudioSettings();
+        return true;
+      }
+      return this.permissions.request(kind);
+    });
+
+    handle<"micPreview:start">("micPreview:start", async () => {
+      await this.audio.startMicPreview();
+    });
+    handle<"micPreview:stop">("micPreview:stop", async () => {
+      await this.audio.stopMicPreview();
+    });
 
     handle<"listening:toggle">("listening:toggle", async () => ({ enabled: await this.toggleListening() }));
     handle<"listening:get">("listening:get", () => ({ enabled: this.prefs.get().listeningEnabled }));
@@ -215,10 +235,19 @@ class Application {
 
     handle<"models:status">("models:status", () => this.models.statusAll());
     handle<"models:download">("models:download", async (id) => {
-      await this.models.download(id, (ev) => {
-        sendEvent({ type: "models:download:progress", payload: ev });
-      });
-      return { ok: true };
+      try {
+        await this.models.download(id, (ev) => {
+          sendEvent({ type: "models:download:progress", payload: ev });
+          log.info("model download progress", {
+            id: ev.id,
+            pct: ev.totalBytes > 0 ? Math.round((ev.receivedBytes / ev.totalBytes) * 100) : 0,
+          });
+        });
+        return { ok: true as const };
+      } catch (err) {
+        log.error("model download failed", { id, err: String(err) });
+        throw err;
+      }
     });
 
     handle<"apps:detected">("apps:detected", async () => this.appWatcher.detectAll());
@@ -244,7 +273,7 @@ class Application {
       shell.openExternal(url);
     });
     handle<"system:quit">("system:quit", () => {
-      app.quit();
+      quitApp();
     });
     handle<"window:show">("window:show", () => {
       showMainWindow();
@@ -289,7 +318,7 @@ function refreshTrayMenu(listening: boolean): void {
     { label: "Open NoteTaker…", click: () => showMainWindow() },
     { label: "Settings…", click: () => showMainWindow("#/settings") },
     { type: "separator" },
-    { label: "Quit", click: () => app.quit() },
+    { label: "Quit", click: () => quitApp() },
   ]);
   tray.setContextMenu(menu);
   tray.setToolTip(listening ? "NoteTaker — listening" : "NoteTaker — paused");
@@ -305,6 +334,12 @@ function createTray(): void {
     application.toggleListening();
   });
   refreshTrayMenu(false);
+}
+
+function quitApp(): void {
+  isQuitting = true;
+  setKeepWindowVisible(false);
+  app.quit();
 }
 
 function setKeepWindowVisible(keep: boolean): void {
@@ -363,6 +398,7 @@ function createMainWindow(): void {
 
   mainWindow.on("close", (e) => {
     if (!mainWindow) return;
+    if (isQuitting) return;
     e.preventDefault();
     mainWindow.hide();
   });
@@ -393,12 +429,18 @@ app.whenReady().then(async () => {
   createTray();
   createMainWindow();
 
-  if (!application.prefs.get().onboardingCompleted) {
+  if (isDev) {
+    app.setName("NoteTaker");
+    if (app.dock) app.dock.show();
+    showMainWindow();
+    mainWindow?.webContents.openDevTools({ mode: "detach" });
+  } else if (!application.prefs.get().onboardingCompleted) {
     setKeepWindowVisible(true);
     showMainWindow();
   }
 
   app.on("activate", () => {
+    if (isQuitting) return;
     if (keepWindowVisible) showMainWindow();
     else if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
     else showMainWindow();
@@ -409,8 +451,10 @@ app.on("window-all-closed", () => {
   // Keep running in tray
 });
 
-app.on("before-quit", async () => {
-  await application["sessions"]?.closeActive().catch(() => {});
+app.on("before-quit", () => {
+  isQuitting = true;
+  setKeepWindowVisible(false);
+  void application.sessions?.closeActive().catch(() => {});
 });
 
 export type { Preferences };

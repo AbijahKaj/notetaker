@@ -1,64 +1,31 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "../desktop";
 
 interface MicVuMeterProps {
   active: boolean;
 }
 
+/** Uses main-process mic levels — does not call getUserMedia (avoids a second macOS mic prompt). */
 export function MicVuMeter({ active }: MicVuMeterProps) {
   const [level, setLevel] = useState(0);
-  const streamRef = useRef<MediaStream | null>(null);
-  const rafRef = useRef<number>(0);
 
   useEffect(() => {
     if (!active) {
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-      cancelAnimationFrame(rafRef.current);
       setLevel(0);
       return;
     }
 
-    let cancelled = false;
-    let audioCtx: AudioContext | null = null;
+    void api().invoke("micPreview:start");
 
-    void (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        audioCtx = new AudioContext();
-        const source = audioCtx.createMediaStreamSource(stream);
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-        const data = new Uint8Array(analyser.frequencyBinCount);
-
-        const tick = () => {
-          analyser.getByteTimeDomainData(data);
-          let sum = 0;
-          for (const v of data) {
-            const n = (v - 128) / 128;
-            sum += n * n;
-          }
-          const rms = Math.sqrt(sum / data.length);
-          setLevel(rms);
-          rafRef.current = requestAnimationFrame(tick);
-        };
-        tick();
-      } catch {
-        setLevel(0);
+    const unsub = api().on((evt) => {
+      if (evt.type === "audio:level") {
+        setLevel(evt.payload.rms);
       }
-    })();
+    });
 
     return () => {
-      cancelled = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-      cancelAnimationFrame(rafRef.current);
-      void audioCtx?.close();
+      unsub();
+      void api().invoke("micPreview:stop");
     };
   }, [active]);
 

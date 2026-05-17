@@ -15,6 +15,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const [step, setStep] = useState<Step>("welcome");
   const [micGranted, setMicGranted] = useState(false);
   const [systemAudioRequested, setSystemAudioRequested] = useState(false);
+  const [systemAudioHint, setSystemAudioHint] = useState<string | null>(null);
   const [appleEventsGranted, setAppleEventsGranted] = useState(false);
   const [apps, setApps] = useState<{ bundleId: string; name: string; installed: boolean; running: boolean }[]>([]);
   const [appWhitelist, setAppWhitelist] = useState<string[]>([]);
@@ -27,6 +28,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const [apiKey, setApiKey] = useState("");
   const [testDone, setTestDone] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const isMac = typeof navigator !== "undefined" && navigator.platform.toLowerCase().includes("mac");
 
   const stepIndex = STEPS.indexOf(step);
@@ -102,6 +104,10 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const requestSystemAudio = async () => {
     await api().invoke("permissions:request", "systemAudio");
     setSystemAudioRequested(true);
+    setSystemAudioHint(
+      "System Settings → Privacy & Security → Audio Capture. Enable “NoteTaker” (packaged app) or “NoteTaker” / “Electron” when running via pnpm dev. The entry only appears after you tap this button.",
+    );
+    await api().invoke("window:show");
   };
 
   const requestAppleEvents = async () => {
@@ -141,18 +147,27 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
 
   const downloadRequiredModels = async () => {
     setDownloading(true);
+    setDownloadError(null);
     const required = models.filter((m) => m.required && !m.installed);
-    for (const m of required) {
-      setDownloadingId(m.id);
-      setDownloadProgress((prev) => ({ ...prev, [m.id]: 0 }));
-      await api().invoke("models:download", m.id);
-      setDownloadProgress((prev) => ({ ...prev, [m.id]: 1 }));
+    try {
+      for (const m of required) {
+        setDownloadingId(m.id);
+        setDownloadProgress((prev) => ({ ...prev, [m.id]: 0 }));
+        try {
+          await api().invoke("models:download", m.id);
+          setDownloadProgress((prev) => ({ ...prev, [m.id]: 1 }));
+        } catch (err) {
+          setDownloadError(`Failed to download ${m.id}. Check your connection and try again. (${String(err)})`);
+          return;
+        }
+      }
+      const updated = await api().invoke("models:status");
+      setModels(updated);
+      await api().invoke("window:show");
+    } finally {
+      setDownloadingId(null);
+      setDownloading(false);
     }
-    setDownloadingId(null);
-    const updated = await api().invoke("models:status");
-    setModels(updated);
-    setDownloading(false);
-    await api().invoke("window:show");
   };
 
   const saveLlm = async () => {
@@ -217,7 +232,8 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
           <>
             <h1 style={{ fontSize: 20, fontWeight: 600 }}>Permissions</h1>
             <p style={{ color: "var(--text-muted)" }}>
-              Grant access so NoteTaker can capture your voice and meeting audio.
+              Three separate macOS permissions (microphone, system audio, browser automation).
+              You should see one dialog per button — not the same prompt repeated.
             </p>
 
             <div className="card" style={{ marginBottom: 8 }}>
@@ -241,9 +257,12 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
                 {systemAudioRequested ? (
                   <span className="badge badge-success">Opened settings</span>
                 ) : (
-                  <button className="btn btn-primary" onClick={requestSystemAudio}>Open settings</button>
+                  <button className="btn btn-primary" onClick={requestSystemAudio}>Enable &amp; open settings</button>
                 )}
               </div>
+              {systemAudioHint && (
+                <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--text-muted)" }}>{systemAudioHint}</p>
+              )}
             </div>
 
             <div className="card">
@@ -319,6 +338,12 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             <p style={{ color: "var(--text-muted)" }}>
               Required speech models (~580 MB). Downloaded once, stored locally.
             </p>
+
+            {downloadError && (
+              <div className="card" style={{ marginBottom: 12, borderColor: "var(--danger, #e55)" }}>
+                <p style={{ margin: 0, fontSize: 13, color: "var(--danger, #e55)" }}>{downloadError}</p>
+              </div>
+            )}
 
             {downloading && (
               <div className="card" style={{ marginBottom: 12 }}>

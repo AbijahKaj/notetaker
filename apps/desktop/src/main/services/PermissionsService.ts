@@ -39,9 +39,7 @@ export class PermissionsService {
 
     if (kind === "systemAudio") {
       if (process.platform !== "darwin") return true;
-      await shell.openExternal(
-        "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture",
-      );
+      await this.openSystemAudioSettings();
       return true;
     }
 
@@ -52,6 +50,13 @@ export class PermissionsService {
     }
 
     return false;
+  }
+
+  async openSystemAudioSettings(): Promise<void> {
+    if (process.platform !== "darwin") return;
+    await shell.openExternal(
+      "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture",
+    );
   }
 
   private async probeAppleEvents(): Promise<boolean> {

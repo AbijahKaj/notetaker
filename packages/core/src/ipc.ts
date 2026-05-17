@@ -25,6 +25,8 @@ export interface IpcInvokeMap {
   "preferences:set": (patch: Partial<Preferences>) => Preferences;
   "permissions:check": () => { microphone: PermissionState; systemAudio: PermissionState; appleEvents: PermissionState };
   "permissions:request": (kind: "microphone" | "systemAudio" | "appleEvents") => boolean;
+  "micPreview:start": () => void;
+  "micPreview:stop": () => void;
   "listening:toggle": () => { enabled: boolean };
   "listening:get": () => { enabled: boolean };
   "sessions:list": (opts: { limit?: number; offset?: number }) => SessionMeta[];

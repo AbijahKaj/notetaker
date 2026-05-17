@@ -2,7 +2,12 @@ const { existsSync } = require("node:fs");
 const { join } = require("node:path");
 
 const isMac = process.platform === "darwin";
-const sidecarPath = join(__dirname, "../../native/audio-tap/.build/release/audio-tap");
+const sidecarAppPath = join(
+  __dirname,
+  "../../native/audio-tap/.build/release/NoteTaker Audio Tap.app",
+);
+const sidecarBinaryPath = join(__dirname, "../../native/audio-tap/.build/release/audio-tap");
+const sidecarPath = existsSync(sidecarAppPath) ? sidecarAppPath : sidecarBinaryPath;
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
@@ -35,7 +40,7 @@ module.exports = {
       NSHighResolutionCapable: true,
     },
     extraResources: isMac && existsSync(sidecarPath)
-      ? [{ from: sidecarPath, to: "audio-tap" }]
+      ? [{ from: sidecarPath, to: existsSync(sidecarAppPath) ? "NoteTaker Audio Tap.app" : "audio-tap" }]
       : [],
   },
   win: {
