@@ -1,0 +1,34 @@
+node_modules/
+dist/
+out/
+build/
+.DS_Store
+*.log
+.env
+.env.local
+.cache/
+*.tsbuildinfo
+
+# Model files (downloaded at onboarding)
+models/
+*.onnx
+*.bin
+*.gguf
+*.mlpackage/
+
+# Native build artifacts
+native/audio-tap/.build/
+native/audio-tap/Package.resolved
+native/mlx-summarizer/.venv/
+native/mlx-summarizer/__pycache__/
+
+# Electron build outputs
+apps/desktop/release/
+apps/desktop/dist-electron/
+
+# SQLite local data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
