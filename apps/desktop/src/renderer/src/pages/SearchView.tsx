@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { SessionMeta } from "@notetaker/core";
 import { api } from "../desktop";
+import { formatSessionDateTime, formatSessionListTitle } from "../utils/sessionDisplay";
 
 interface SearchViewProps {
   onOpenSession: (id: string) => void;
@@ -29,16 +30,16 @@ export function SearchView({ onOpenSession }: SearchViewProps) {
         <button className="btn btn-primary" onClick={search}>Search</button>
       </div>
 
-      {results.map((s) => (
+      {results.map((s, i) => (
         <button
           key={s.id}
           className="session-card"
           style={{ width: "100%", textAlign: "left" }}
           onClick={() => onOpenSession(s.id)}
         >
-          <div className="session-card-title">{s.title ?? "Untitled session"}</div>
+          <div className="session-card-title">{formatSessionListTitle(s, i)}</div>
           <div className="session-card-meta">
-            {new Date(s.startedAt).toLocaleString()}
+            {formatSessionDateTime(s.startedAt)}
             {s.appContext ? ` · ${s.appContext}` : ""}
           </div>
         </button>

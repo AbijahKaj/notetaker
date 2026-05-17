@@ -388,6 +388,7 @@ function createMainWindow(): void {
     width: 980,
     height: 720,
     show: false,
+    title: "",
     titleBarStyle: "hiddenInset",
     backgroundColor: "#0f0f10",
     webPreferences: {

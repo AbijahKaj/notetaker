@@ -1,4 +1,5 @@
 import type { SessionMeta } from "@notetaker/core";
+import { formatSessionDateTime, formatSessionListTitle } from "../utils/sessionDisplay";
 
 type Page = "session" | "review" | "settings" | "onboarding" | "search";
 
@@ -50,17 +51,15 @@ export function Sidebar({
           <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
             Recent
           </div>
-          {sessions.slice(0, 10).map((s) => (
+          {sessions.slice(0, 10).map((s, i) => (
             <button
               key={s.id}
               className="session-card"
               style={{ width: "100%", textAlign: "left" }}
               onClick={() => onOpenSession(s.id)}
             >
-              <div className="session-card-title">{s.title ?? "Untitled session"}</div>
-              <div className="session-card-meta">
-                {new Date(s.startedAt).toLocaleDateString()}
-              </div>
+              <div className="session-card-title">{formatSessionListTitle(s, i)}</div>
+              <div className="session-card-meta">{formatSessionDateTime(s.startedAt)}</div>
             </button>
           ))}
         </div>
