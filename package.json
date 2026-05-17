@@ -12,7 +12,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "models:download": "tsx scripts/download-models.ts",
+    "models:download": "tsx scripts/download-models.ts --required-only",
     "sidecar:build": "bash scripts/build-sidecar.sh"
   },
   "devDependencies": {

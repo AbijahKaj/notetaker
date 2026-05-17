@@ -19,6 +19,7 @@ export class SessionsService extends TypedEmitter<Pick<PipelineEvents, "session:
   private prefs: PreferencesService;
   private speech: SpeechService | null;
   private activeSessionId: string | null = null;
+  private sessionEpochMs = 0;
   private lastActivityMs = 0;
   private idleTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -37,12 +38,18 @@ export class SessionsService extends TypedEmitter<Pick<PipelineEvents, "session:
     }
   }
 
-  async absorbSegment(seg: Omit<TranscriptSegment, "id" | "sessionId">): Promise<TranscriptSegment> {
+  async absorbSegment(seg: Omit<TranscriptSegment, "id" | "sessionId">): Promise<TranscriptSegment | null> {
+    const text = seg.text.trim();
+    if (!text) return null;
+
     const sessionId = await this.ensureActiveSession(seg.sourceId);
     const full: TranscriptSegment = {
       ...seg,
+      text,
       id: newSegmentId(),
       sessionId,
+      startMs: Math.max(0, seg.startMs - this.sessionEpochMs),
+      endMs: Math.max(0, seg.endMs - this.sessionEpochMs),
     };
     this.storage.getDb().insertSegment(full);
     this.lastActivityMs = Date.now();
@@ -55,6 +62,7 @@ export class SessionsService extends TypedEmitter<Pick<PipelineEvents, "session:
     const open = this.storage.getDb().getOpenSession();
     if (open) {
       this.activeSessionId = open.id;
+      this.sessionEpochMs = open.startedAt;
       this.startIdleTimer();
       return open.id;
     }
@@ -64,6 +72,7 @@ export class SessionsService extends TypedEmitter<Pick<PipelineEvents, "session:
       startedAt: Date.now(),
     });
     this.activeSessionId = session.id;
+    this.sessionEpochMs = session.startedAt;
     this.lastActivityMs = Date.now();
     this.speech?.setSessionId(session.id);
     this.startIdleTimer();
@@ -86,6 +95,7 @@ export class SessionsService extends TypedEmitter<Pick<PipelineEvents, "session:
     if (!this.activeSessionId) return null;
     const id = this.activeSessionId;
     this.activeSessionId = null;
+    this.sessionEpochMs = 0;
     if (this.idleTimer) {
       clearInterval(this.idleTimer);
       this.idleTimer = null;

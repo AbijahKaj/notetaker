@@ -2,7 +2,7 @@
 
 ## Overview
 
-NoteTaker is a macOS menu-bar Electron app with a Swift CoreAudio sidecar for per-process audio capture. Speech processing runs locally via sherpa-onnx-node (Silero VAD, Parakeet TDT v3, Whisper fallback, Sortformer diarization). Summaries are produced by pluggable LLM adapters (Anthropic, OpenAI, OpenRouter, or local MLX).
+NoteTaker is a macOS menu-bar Electron app with a Swift CoreAudio sidecar for per-process audio capture. Speech processing runs locally via sherpa-onnx-node (Silero VAD, Parakeet TDT v3, Sortformer diarization). Summaries are produced by pluggable LLM adapters (Anthropic, OpenAI, OpenRouter, or local MLX).
 
 ## Data flow
 
@@ -11,7 +11,7 @@ Mic + meeting app/browser taps (Swift sidecar)
   → Unix socket PCM frames
   → AudioBridge (TypeScript)
   → Silero VAD
-  → Language ID → Parakeet (EU) or Whisper (other)
+  → Parakeet TDT v3
   → Diarization
   → SQLite + FTS5
   → LLM summarizer

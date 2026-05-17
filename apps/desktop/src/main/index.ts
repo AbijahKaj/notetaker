@@ -87,6 +87,7 @@ class Application {
 
     this.speech.on("transcript:segment", async (seg) => {
       const enriched = await this.sessions.absorbSegment(seg);
+      if (!enriched) return;
       log.info("transcript segment", { text: enriched.text.slice(0, 120) });
       sendEvent({ type: "transcript:segment", payload: enriched });
     });

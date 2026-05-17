@@ -1,6 +1,6 @@
 # Always-On Mac Note Taker
 
-A privacy-first, Granola-style meeting note taker for macOS. Microphone stays on always; system audio is captured only from a curated whitelist of meeting apps and a user-editable list of meeting websites detected via AppleScript polling. Local speech-to-text (Parakeet for European languages, Whisper as fallback) plus local speaker diarization. Summaries are produced by your choice of cloud LLM (Anthropic, OpenAI, OpenRouter) or a small local MLX model downloaded during onboarding.
+A privacy-first, Granola-style meeting note taker for macOS. Microphone stays on always; system audio is captured only from a curated whitelist of meeting apps and a user-editable list of meeting websites detected via AppleScript polling. Local speech-to-text (Parakeet TDT v3) plus local speaker diarization. Summaries are produced by your choice of cloud LLM (Anthropic, OpenAI, OpenRouter) or a small local MLX model downloaded during onboarding.
 
 ## Requirements
 

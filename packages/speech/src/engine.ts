@@ -3,7 +3,6 @@ import {
   TypedEmitter,
   createLogger,
   newSegmentId,
-  isParakeetLanguage,
   type PcmFrame,
   type SpeechSegment,
   type TranscriptSegment,
@@ -12,7 +11,7 @@ import {
 } from "@notetaker/core";
 import type { ModelPaths } from "./models.js";
 import {
-  createOfflineRecognizer,
+  createParakeetRecognizer,
   createSileroVad,
   importSherpa,
   tryCreateDiarizer,
@@ -31,14 +30,17 @@ interface VadState {
   speechStartMs: number;
   buffer: Float32Array[];
   bufferSamples: number;
+  silentWindows: number;
 }
 
 const VAD_WINDOW_MS = 32;
-const VAD_MIN_SPEECH_MS = 300;
-const VAD_PRE_SPEECH_PAD_MS = 300;
-const VAD_REDEMPTION_MS = 400;
-const VAD_MAX_UTTERANCE_MS = 15_000;
-const ENERGY_SPEECH_THRESHOLD = 0.004;
+const VAD_MIN_SPEECH_MS = 400;
+const VAD_END_SILENCE_MS = 900;
+const VAD_PRE_SPEECH_PAD_MS = 200;
+const VAD_REDEMPTION_MS = 200;
+const VAD_MAX_UTTERANCE_MS = 30_000;
+const MIN_STT_SAMPLES = Math.floor(SAMPLE_RATE * 0.45);
+const ENERGY_SPEECH_THRESHOLD = 0.003;
 const LANG_DETECT_SAMPLES = SAMPLE_RATE * 3;
 
 export class SpeechEngine extends TypedEmitter<PipelineEvents> {
@@ -89,7 +91,7 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
   private processVad(frame: PcmFrame): void {
     let state = this.vadStates.get(frame.sourceId);
     if (!state) {
-      state = { inSpeech: false, speechStartMs: 0, buffer: [], bufferSamples: 0 };
+      state = { inSpeech: false, speechStartMs: 0, buffer: [], bufferSamples: 0, silentWindows: 0 };
       this.vadStates.set(frame.sourceId, state);
     }
 
@@ -107,27 +109,35 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
         state.speechStartMs = frame.tsMs;
         state.buffer = [];
         state.bufferSamples = 0;
+        state.silentWindows = 0;
       }
 
       if (state.inSpeech) {
-        state.buffer.push(chunk);
-        state.bufferSamples += chunk.length;
+        if (isSpeech) {
+          state.silentWindows = 0;
+          state.buffer.push(chunk);
+          state.bufferSamples += chunk.length;
+        } else {
+          state.silentWindows += 1;
+        }
 
         const utteranceMs = frame.tsMs - state.speechStartMs;
         if (utteranceMs >= VAD_MAX_UTTERANCE_MS) {
           this.flushSpeechSegment(frame, state);
           continue;
         }
-      }
 
-      if (!isSpeech && state.inSpeech) {
-        const speechDuration = frame.tsMs - state.speechStartMs;
-        if (speechDuration >= VAD_MIN_SPEECH_MS) {
-          this.flushSpeechSegment(frame, state);
-        } else {
-          state.inSpeech = false;
-          state.buffer = [];
-          state.bufferSamples = 0;
+        const silenceMs = state.silentWindows * VAD_WINDOW_MS;
+        if (silenceMs >= VAD_END_SILENCE_MS) {
+          const speechDuration = frame.tsMs - state.speechStartMs - silenceMs;
+          if (speechDuration >= VAD_MIN_SPEECH_MS) {
+            this.flushSpeechSegment(frame, state);
+          } else {
+            state.inSpeech = false;
+            state.buffer = [];
+            state.bufferSamples = 0;
+            state.silentWindows = 0;
+          }
         }
       }
     }
@@ -135,10 +145,11 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
 
   private flushSpeechSegment(frame: PcmFrame, state: VadState): void {
     const pcm = concatFloat32(state.buffer);
-    if (pcm.length === 0) {
+    if (pcm.length < MIN_STT_SAMPLES) {
       state.inSpeech = false;
       state.buffer = [];
       state.bufferSamples = 0;
+      state.silentWindows = 0;
       return;
     }
     const segment: SpeechSegment = {
@@ -153,6 +164,7 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
     state.inSpeech = false;
     state.buffer = [];
     state.bufferSamples = 0;
+    state.silentWindows = 0;
   }
 
   private detectSpeech(chunk: Float32Array): boolean {
@@ -192,33 +204,49 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
 
   private async transcribe(segment: SpeechSegment): Promise<TranscriptSegment[]> {
     const lang = await this.detectLanguage(segment.pcm);
-    const useParakeet = isParakeetLanguage(lang);
-    const text = await this.runStt(segment.pcm, useParakeet ? "parakeet" : "whisper", lang);
+    const text = (await this.runStt(segment.pcm)).trim();
+    if (!text) return [];
+
     const speakers = await this.diarize(segment.pcm, text);
 
     if (speakers.length === 0) {
-      return [{
-        id: newSegmentId(),
-        sessionId: this.opts.sessionId,
-        sourceId: segment.sourceId,
-        speakerId: "S1",
-        startMs: segment.startMs,
-        endMs: segment.endMs,
-        text,
-        lang,
-      }];
+      return [this.makeTranscriptSegment(segment, "S1", text, lang)];
     }
 
-    return speakers.map((sp, i) => ({
+    return speakers
+      .map((sp, i) => {
+        const line = (sp.text || (i === 0 ? text : "")).trim();
+        if (!line) return null;
+        return this.makeTranscriptSegment(
+          segment,
+          sp.speakerId,
+          line,
+          lang,
+          sp.startMs,
+          sp.endMs,
+        );
+      })
+      .filter((seg): seg is TranscriptSegment => seg !== null);
+  }
+
+  private makeTranscriptSegment(
+    segment: SpeechSegment,
+    speakerId: string,
+    text: string,
+    lang: string,
+    startMs?: number,
+    endMs?: number,
+  ): TranscriptSegment {
+    return {
       id: newSegmentId(),
       sessionId: this.opts.sessionId,
       sourceId: segment.sourceId,
-      speakerId: sp.speakerId,
-      startMs: sp.startMs ?? segment.startMs,
-      endMs: sp.endMs ?? segment.endMs,
-      text: sp.text || (i === 0 ? text : ""),
+      speakerId,
+      startMs: startMs ?? segment.startMs,
+      endMs: endMs ?? segment.endMs,
+      text,
       lang,
-    }));
+    };
   }
 
   private async detectLanguage(pcm: Float32Array): Promise<string> {
@@ -239,24 +267,12 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
     return "en";
   }
 
-  private async runStt(
-    pcm: Float32Array,
-    engine: "parakeet" | "whisper",
-    lang: string,
-  ): Promise<string> {
-    if (this.sherpa) {
+  private async runStt(pcm: Float32Array): Promise<string> {
+    if (this.sherpa?.parakeet) {
       try {
-        if (engine === "parakeet" && this.sherpa.parakeet) {
-          return this.sherpa.parakeet.transcribe(pcm) as string;
-        }
-        if (engine === "whisper" && this.sherpa.whisper) {
-          return this.sherpa.whisper.transcribe(pcm, { language: lang }) as string;
-        }
-        if (this.sherpa.parakeet) {
-          return this.sherpa.parakeet.transcribe(pcm) as string;
-        }
+        return this.sherpa.parakeet.transcribe(pcm);
       } catch (err) {
-        log.warn("stt engine error", { engine, err: String(err) });
+        log.warn("parakeet stt error", { err: String(err) });
       }
     }
     return `[transcription pending — install models via pnpm models:download]`;
@@ -288,7 +304,6 @@ interface DiarizeResult {
 interface SherpaModules {
   vad?: { acceptWaveform: (pcm: Float32Array) => void; isDetected: () => boolean };
   parakeet?: { transcribe: (pcm: Float32Array) => string };
-  whisper?: { transcribe: (pcm: Float32Array, opts: { language: string }) => string };
   langId?: { detect: (pcm: Float32Array) => string };
   diarizer?: { process: (pcm: Float32Array) => DiarizeResult[] };
 }
@@ -311,25 +326,16 @@ async function loadSherpa(paths: ModelPaths): Promise<SherpaModules | null> {
     let parakeet: SherpaModules["parakeet"];
     if (existsSync(paths.parakeet)) {
       try {
-        parakeet = createOfflineRecognizer(sherpa, paths.parakeet, "parakeet");
+        parakeet = createParakeetRecognizer(sherpa, paths.parakeet);
       } catch (err) {
         log.warn("parakeet model load failed", { err: String(err) });
-      }
-    }
-
-    let whisper: SherpaModules["whisper"];
-    if (paths.whisper && existsSync(paths.whisper)) {
-      try {
-        whisper = createOfflineRecognizer(sherpa, paths.whisper, "whisper");
-      } catch (err) {
-        log.warn("whisper model load failed", { err: String(err) });
       }
     }
 
     const diarizer =
       existsSync(paths.diarization) ? tryCreateDiarizer(sherpa, paths.diarization) ?? undefined : undefined;
 
-    return { ...(vad ? { vad } : {}), parakeet, whisper, diarizer };
+    return { ...(vad ? { vad } : {}), parakeet, diarizer };
   } catch (err) {
     log.warn("failed to load sherpa-onnx-node", { err: String(err) });
     return null;

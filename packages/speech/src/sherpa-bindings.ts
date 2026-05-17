@@ -61,44 +61,27 @@ function findModelFile(dir: string, pattern: RegExp): string | undefined {
   }
 }
 
-export function createOfflineRecognizer(
+export function createParakeetRecognizer(
   sherpa: SherpaModule,
   modelDir: string,
-  kind: "parakeet" | "whisper",
-): { transcribe: (pcm: Float32Array, opts?: { language?: string }) => string } {
+): { transcribe: (pcm: Float32Array) => string } {
   const tokens = findModelFile(modelDir, /^tokens\.txt$/i);
   if (!tokens) throw new Error(`tokens.txt not found in ${modelDir}`);
 
-  let modelConfig: Record<string, unknown>;
-  if (kind === "whisper") {
-    const encoder = findModelFile(modelDir, /encoder.*\.onnx$/i);
-    const decoder = findModelFile(modelDir, /decoder.*\.onnx$/i);
-    if (!encoder || !decoder) throw new Error(`incomplete whisper model in ${modelDir}`);
-    modelConfig = {
-      whisper: {
-        encoder: join(modelDir, encoder),
-        decoder: join(modelDir, decoder),
-        language: "en",
-        task: "transcribe",
-      },
-      tokens: join(modelDir, tokens),
-      numThreads: 4,
-    };
-  } else {
-    const encoder = findModelFile(modelDir, /encoder.*\.onnx$/i);
-    const decoder = findModelFile(modelDir, /decoder.*\.onnx$/i);
-    const joiner = findModelFile(modelDir, /joiner.*\.onnx$/i);
-    if (!encoder || !decoder || !joiner) throw new Error(`incomplete parakeet model in ${modelDir}`);
-    modelConfig = {
-      transducer: {
-        encoder: join(modelDir, encoder),
-        decoder: join(modelDir, decoder),
-        joiner: join(modelDir, joiner),
-      },
-      tokens: join(modelDir, tokens),
-      numThreads: 4,
-    };
-  }
+  const encoder = findModelFile(modelDir, /encoder.*\.onnx$/i);
+  const decoder = findModelFile(modelDir, /decoder.*\.onnx$/i);
+  const joiner = findModelFile(modelDir, /joiner.*\.onnx$/i);
+  if (!encoder || !decoder || !joiner) throw new Error(`incomplete parakeet model in ${modelDir}`);
+
+  const modelConfig: Record<string, unknown> = {
+    transducer: {
+      encoder: join(modelDir, encoder),
+      decoder: join(modelDir, decoder),
+      joiner: join(modelDir, joiner),
+    },
+    tokens: join(modelDir, tokens),
+    numThreads: 4,
+  };
 
   const recognizer = new sherpa.OfflineRecognizer({
     featConfig: { sampleRate: 16_000, featureDim: 80 },
@@ -106,12 +89,9 @@ export function createOfflineRecognizer(
   });
 
   return {
-    transcribe: (pcm, opts) => {
+    transcribe: (pcm) => {
       const stream = recognizer.createStream();
       stream.acceptWaveform({ samples: pcm, sampleRate: 16_000 });
-      if (opts?.language && "setOption" in stream) {
-        (stream as { setOption: (key: string, value: string) => void }).setOption("language", opts.language);
-      }
       recognizer.decode(stream);
       const result = recognizer.getResult(stream);
       return result?.text?.trim() ?? "";
