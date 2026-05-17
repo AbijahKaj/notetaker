@@ -1,66 +1,19 @@
-import { join } from "node:path";
-import { existsSync, mkdirSync } from "node:fs";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { pipeline } from "node:stream/promises";
-import { Readable } from "node:stream";
-import { createLogger } from "@notetaker/core";
+import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { unlink } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { promisify } from "node:util";
+import { MODEL_CATALOG, createLogger } from "@notetaker/core";
 
+const execFileAsync = promisify(execFile);
 const log = createLogger("models");
-
-export interface ModelSpec {
-  id: string;
-  required: boolean;
-  sizeBytes: number;
-  sha256?: string;
-  url: string;
-  dest: string;
-}
 
 export interface DownloadProgress {
   id: string;
   receivedBytes: number;
   totalBytes: number;
 }
-
-const MODEL_CATALOG: Omit<ModelSpec, "dest">[] = [
-  {
-    id: "silero-vad",
-    required: true,
-    sizeBytes: 5_000_000,
-    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/vad-models/silero_vad.onnx",
-  },
-  {
-    id: "parakeet-tdt-v3",
-    required: true,
-    sizeBytes: 500_000_000,
-    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3.tar.bz2",
-  },
-  {
-    id: "sortformer-diarization",
-    required: true,
-    sizeBytes: 50_000_000,
-    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-diarization-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2",
-  },
-  {
-    id: "lang-id",
-    required: true,
-    sizeBytes: 10_000_000,
-    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.tar.bz2",
-  },
-  {
-    id: "whisper-large-v3-turbo",
-    required: false,
-    sizeBytes: 1_600_000_000,
-    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-large-v3-turbo.tar.bz2",
-  },
-  {
-    id: "llama-3.2-3b-mlx",
-    required: false,
-    sizeBytes: 2_000_000_000,
-    url: "https://huggingface.co/mlx-community/Llama-3.2-3B-Instruct-4bit/resolve/main/model.safetensors",
-  },
-];
 
 export class ModelManager {
   private modelsDir: string;
@@ -84,8 +37,7 @@ export class ModelManager {
   }
 
   isInstalled(id: string): boolean {
-    const dest = this.destFor(id);
-    return existsSync(dest);
+    return existsSync(this.installPathFor(id));
   }
 
   async download(
@@ -95,17 +47,17 @@ export class ModelManager {
     const spec = MODEL_CATALOG.find((m) => m.id === id);
     if (!spec) throw new Error(`Unknown model: ${id}`);
 
-    const dest = this.destFor(id);
+    const dest = this.installPathFor(id);
     if (existsSync(dest)) {
       log.info("model already installed", { id });
       return;
     }
 
     log.info("downloading model", { id, url: spec.url });
-    const tmpPath = dest + ".download";
+    const tmpPath = join(this.modelsDir, `.${id}.download`);
 
     const res = await fetch(spec.url);
-    if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+    if (!res.ok) throw new Error(`Download failed: ${res.status} for ${spec.url}`);
     const totalBytes = Number(res.headers.get("content-length") ?? spec.sizeBytes);
     let receivedBytes = 0;
     onProgress?.({ id, receivedBytes: 0, totalBytes });
@@ -129,34 +81,30 @@ export class ModelManager {
       writeStream.on("error", reject);
     });
 
-    if (spec.sha256) {
-      const hash = await sha256File(tmpPath);
-      if (hash !== spec.sha256) {
-        throw new Error(`SHA256 mismatch for ${id}: expected ${spec.sha256}, got ${hash}`);
+    try {
+      if (spec.archive) {
+        await execFileAsync("tar", ["-xjf", tmpPath, "-C", this.modelsDir]);
+        await unlink(tmpPath);
+        if (!existsSync(dest)) {
+          throw new Error(`Archive extracted but ${spec.installPath} not found`);
+        }
+      } else {
+        mkdirSync(dirname(dest), { recursive: true });
+        const { rename } = await import("node:fs/promises");
+        await rename(tmpPath, dest);
       }
+    } catch (err) {
+      await unlink(tmpPath).catch(() => {});
+      throw err;
     }
 
-    const { rename } = await import("node:fs/promises");
-    await rename(tmpPath, dest);
     onProgress?.({ id, receivedBytes: totalBytes, totalBytes });
     log.info("model installed", { id, dest });
   }
 
-  private destFor(id: string): string {
-    const map: Record<string, string> = {
-      "silero-vad": join(this.modelsDir, "silero_vad", "silero_vad.onnx"),
-      "parakeet-tdt-v3": join(this.modelsDir, "parakeet-tdt-0.6b-v3"),
-      "sortformer-diarization": join(this.modelsDir, "sortformer-diarization"),
-      "lang-id": join(this.modelsDir, "lang-id"),
-      "whisper-large-v3-turbo": join(this.modelsDir, "whisper-large-v3-turbo"),
-      "llama-3.2-3b-mlx": join(this.modelsDir, "llama-3.2-3b-mlx"),
-    };
-    return map[id] ?? join(this.modelsDir, id);
+  private installPathFor(id: string): string {
+    const spec = MODEL_CATALOG.find((m) => m.id === id);
+    if (!spec) return join(this.modelsDir, id);
+    return join(this.modelsDir, spec.installPath);
   }
-}
-
-async function sha256File(path: string): Promise<string> {
-  const { readFile } = await import("node:fs/promises");
-  const data = await readFile(path);
-  return createHash("sha256").update(data).digest("hex");
 }
