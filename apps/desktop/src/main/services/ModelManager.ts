@@ -108,6 +108,7 @@ export class ModelManager {
     if (!res.ok) throw new Error(`Download failed: ${res.status}`);
     const totalBytes = Number(res.headers.get("content-length") ?? spec.sizeBytes);
     let receivedBytes = 0;
+    onProgress?.({ id, receivedBytes: 0, totalBytes });
 
     const body = res.body;
     if (!body) throw new Error("No response body");
@@ -137,6 +138,7 @@ export class ModelManager {
 
     const { rename } = await import("node:fs/promises");
     await rename(tmpPath, dest);
+    onProgress?.({ id, receivedBytes: totalBytes, totalBytes });
     log.info("model installed", { id, dest });
   }
 

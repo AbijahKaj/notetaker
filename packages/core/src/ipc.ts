@@ -47,6 +47,8 @@ export interface IpcInvokeMap {
   "export:srt": (sessionId: string) => string;
   "system:openExternal": (url: string) => void;
   "system:quit": () => void;
+  "window:show": () => void;
+  "window:setKeepVisible": (keep: boolean) => void;
 }
 
 export type IpcChannel = keyof IpcInvokeMap;

@@ -22,6 +22,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
+let keepWindowVisible = false;
+let reshowTimer: ReturnType<typeof setTimeout> | null = null;
 
 const isDev = !app.isPackaged;
 
@@ -244,6 +246,12 @@ class Application {
     handle<"system:quit">("system:quit", () => {
       app.quit();
     });
+    handle<"window:show">("window:show", () => {
+      showMainWindow();
+    });
+    handle<"window:setKeepVisible">("window:setKeepVisible", (keep) => {
+      setKeepWindowVisible(keep);
+    });
   }
 }
 
@@ -299,6 +307,26 @@ function createTray(): void {
   refreshTrayMenu(false);
 }
 
+function setKeepWindowVisible(keep: boolean): void {
+  keepWindowVisible = keep;
+  if (!keep && reshowTimer) {
+    clearTimeout(reshowTimer);
+    reshowTimer = null;
+  }
+}
+
+function scheduleReshowWindow(): void {
+  if (!keepWindowVisible || !mainWindow || mainWindow.isDestroyed()) return;
+  if (reshowTimer) clearTimeout(reshowTimer);
+  reshowTimer = setTimeout(() => {
+    reshowTimer = null;
+    if (keepWindowVisible && mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  }, 600);
+}
+
 function showMainWindow(hash?: string): void {
   if (!mainWindow) {
     createMainWindow();
@@ -339,6 +367,14 @@ function createMainWindow(): void {
     mainWindow.hide();
   });
 
+  mainWindow.on("blur", () => {
+    if (keepWindowVisible) scheduleReshowWindow();
+  });
+
+  mainWindow.on("hide", () => {
+    if (keepWindowVisible) scheduleReshowWindow();
+  });
+
   if (isDev && process.env["ELECTRON_RENDERER_URL"]) {
     mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
   } else {
@@ -357,8 +393,14 @@ app.whenReady().then(async () => {
   createTray();
   createMainWindow();
 
+  if (!application.prefs.get().onboardingCompleted) {
+    setKeepWindowVisible(true);
+    showMainWindow();
+  }
+
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    if (keepWindowVisible) showMainWindow();
+    else if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
     else showMainWindow();
   });
 });

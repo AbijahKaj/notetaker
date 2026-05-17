@@ -89,6 +89,7 @@ export function App() {
   const handleRunSetup = useCallback(() => {
     setShowOnboarding(true);
     setPage("onboarding");
+    void api().invoke("window:show");
   }, []);
 
   if (page === "onboarding" || showOnboarding) {

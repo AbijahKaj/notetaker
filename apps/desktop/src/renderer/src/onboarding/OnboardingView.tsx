@@ -22,6 +22,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const [newSite, setNewSite] = useState("");
   const [models, setModels] = useState<{ id: string; required: boolean; installed: boolean; sizeBytes: number }[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("anthropic");
   const [apiKey, setApiKey] = useState("");
   const [testDone, setTestDone] = useState(false);
@@ -40,6 +41,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   };
 
   useEffect(() => {
+    void api().invoke("window:setKeepVisible", true);
     const unsub = api().on((evt) => {
       if (evt.type === "models:download:progress") {
         const pct = evt.payload.totalBytes > 0
@@ -48,7 +50,10 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
         setDownloadProgress((prev) => ({ ...prev, [evt.payload.id]: pct }));
       }
     });
-    return unsub;
+    return () => {
+      unsub();
+      void api().invoke("window:setKeepVisible", false);
+    };
   }, []);
 
   useEffect(() => {
@@ -83,12 +88,15 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
 
   const finish = async () => {
     await api().invoke("preferences:set", { onboardingCompleted: true });
+    await api().invoke("window:setKeepVisible", false);
+    await api().invoke("window:show");
     onComplete();
   };
 
   const requestMic = async () => {
     const granted = await api().invoke("permissions:request", "microphone");
     setMicGranted(granted);
+    await api().invoke("window:show");
   };
 
   const requestSystemAudio = async () => {
@@ -102,6 +110,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
     if (granted) {
       await api().invoke("preferences:set", { automationGranted: true });
     }
+    await api().invoke("window:show");
   };
 
   const toggleApp = (bundleId: string) => {
@@ -134,11 +143,16 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
     setDownloading(true);
     const required = models.filter((m) => m.required && !m.installed);
     for (const m of required) {
+      setDownloadingId(m.id);
+      setDownloadProgress((prev) => ({ ...prev, [m.id]: 0 }));
       await api().invoke("models:download", m.id);
+      setDownloadProgress((prev) => ({ ...prev, [m.id]: 1 }));
     }
+    setDownloadingId(null);
     const updated = await api().invoke("models:status");
     setModels(updated);
     setDownloading(false);
+    await api().invoke("window:show");
   };
 
   const saveLlm = async () => {
@@ -160,6 +174,14 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   };
 
   const permissionsReady = micGranted && (systemAudioRequested || !isMac);
+
+  const requiredModels = models.filter((m) => m.required);
+  const requiredPending = requiredModels.filter((m) => !m.installed);
+  const overallProgress = requiredModels.length > 0
+    ? requiredModels.reduce((sum, m) => sum + (downloadProgress[m.id] ?? (m.installed ? 1 : 0)), 0) / requiredModels.length
+    : 1;
+
+  const formatPct = (pct: number) => `${Math.round(pct * 100)}%`;
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 }}>
@@ -297,31 +319,58 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             <p style={{ color: "var(--text-muted)" }}>
               Required speech models (~580 MB). Downloaded once, stored locally.
             </p>
-            {models.map((m) => (
-              <div key={m.id} className="whitelist-item" style={{ flexDirection: "column", alignItems: "stretch" }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span>{m.id}</span>
-                  {m.installed ? (
-                    <span className="badge badge-success">Installed</span>
-                  ) : (
-                    <span className="badge badge-muted">{Math.round(m.sizeBytes / 1_000_000)} MB</span>
+
+            {downloading && (
+              <div className="card" style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13 }}>
+                  <span>
+                    {downloadingId
+                      ? `Downloading ${downloadingId}…`
+                      : downloading
+                        ? "Preparing download…"
+                        : "Overall progress"}
+                  </span>
+                  <span style={{ color: "var(--text-muted)" }}>{formatPct(overallProgress)}</span>
+                </div>
+                <div className="progress-bar">
+                  <div className="progress-bar-fill" style={{ width: `${overallProgress * 100}%` }} />
+                </div>
+              </div>
+            )}
+
+            {models.map((m) => {
+              const progress = downloadProgress[m.id];
+              const isActive = downloadingId === m.id;
+              const showProgress = progress !== undefined && progress < 1;
+
+              return (
+                <div key={m.id} className="whitelist-item" style={{ flexDirection: "column", alignItems: "stretch" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>{m.id}</span>
+                    {m.installed ? (
+                      <span className="badge badge-success">Installed</span>
+                    ) : isActive ? (
+                      <span className="badge badge-muted">{formatPct(progress ?? 0)}</span>
+                    ) : (
+                      <span className="badge badge-muted">{Math.round(m.sizeBytes / 1_000_000)} MB</span>
+                    )}
+                  </div>
+                  {showProgress && (
+                    <div className="progress-bar" style={{ marginTop: 8 }}>
+                      <div className="progress-bar-fill" style={{ width: `${(progress ?? 0) * 100}%` }} />
+                    </div>
                   )}
                 </div>
-                {downloadProgress[m.id] !== undefined && downloadProgress[m.id]! < 1 && (
-                  <div className="progress-bar">
-                    <div className="progress-bar-fill" style={{ width: `${downloadProgress[m.id]! * 100}%` }} />
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
             <div className="onboarding-actions">
-              <button className="btn btn-ghost" onClick={downloadRequiredModels} disabled={downloading}>
-                {downloading ? "Downloading…" : "Download required"}
+              <button className="btn btn-ghost" onClick={downloadRequiredModels} disabled={downloading || requiredPending.length === 0}>
+                {downloading ? "Downloading…" : requiredPending.length === 0 ? "All required installed" : "Download required"}
               </button>
               <button
                 className="btn btn-primary"
                 onClick={next}
-                disabled={models.some((m) => m.required && !m.installed)}
+                disabled={models.some((m) => m.required && !m.installed) || downloading}
               >
                 Continue
               </button>
