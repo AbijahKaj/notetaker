@@ -38,7 +38,7 @@ export function SessionView({ session, segments, listening, onNotesChange, onSes
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <h1 className="page-title" style={{ marginBottom: 0 }}>
-          {session ? "Active Session" : listening ? "Listening — waiting for speech" : "Not listening"}
+          {session ? "Active Session" : listening ? "Listening" : "Paused"}
         </h1>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {session && <span className="badge badge-success">Recording</span>}

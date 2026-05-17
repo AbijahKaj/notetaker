@@ -94,10 +94,7 @@ export function App() {
 
   if (page === "onboarding" || showOnboarding) {
     return (
-      <div className="app-shell">
-        <header className="titlebar">
-          <span className="titlebar-title">NoteTaker</span>
-        </header>
+      <div className="app-shell app-shell--onboarding">
         <OnboardingView onComplete={handleOnboardingComplete} />
       </div>
     );
@@ -105,9 +102,6 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <header className="titlebar">
-        <span className="titlebar-title">NoteTaker</span>
-      </header>
       <div className="app-layout">
       <Sidebar
         listening={listening}
