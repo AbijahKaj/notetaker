@@ -37,7 +37,12 @@ export class AudioIngestService extends TypedEmitter<PipelineEvents> {
       app.getAppPath(),
       "../../native/audio-tap/.build/release/audio-tap",
     );
-    if (existsSync(devBinary)) return devBinary;
+    if (existsSync(devBinary)) {
+      log.warn(
+        "audio sidecar .app bundle missing — run pnpm sidecar:build for mic permission prompts",
+      );
+      return devBinary;
+    }
 
     return devBundled;
   }

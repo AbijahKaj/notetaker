@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } from "electron";
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
@@ -74,7 +74,7 @@ class Application {
         const rms = Math.sqrt(sum / frame.pcm.length);
         sendEvent({ type: "audio:level", payload: { sourceId: frame.sourceId, rms } });
       }
-      if (this.prefs.get().listeningEnabled) {
+      if (this.prefs.get().listeningEnabled && this.prefs.get().liveTranscript) {
         this.speech.feed(frame);
       }
     });
@@ -87,6 +87,7 @@ class Application {
 
     this.speech.on("transcript:segment", async (seg) => {
       const enriched = await this.sessions.absorbSegment(seg);
+      log.info("transcript segment", { text: enriched.text.slice(0, 120) });
       sendEvent({ type: "transcript:segment", payload: enriched });
     });
 
@@ -109,24 +110,33 @@ class Application {
       }
     });
 
-    this.appWatcher.on("activate", async (bundleId, name, kind) => {
-      if (kind === "browser") {
-        await this.audio.addBrowserSource({ bundleId, matchedSite: name });
-      } else {
-        await this.audio.addAppSource({ bundleId });
-      }
-      log.info("watched app running", { bundleId, name, kind });
+    this.appWatcher.on("activate", async (bundleId, name) => {
+      await this.audio.addAppSource({ bundleId });
+      log.info("watched app running", { bundleId, name });
     });
-    this.appWatcher.on("deactivate", async (bundleId, kind) => {
-      if (kind === "browser") {
-        await this.audio.removeBrowserSource({ bundleId });
-      } else {
-        await this.audio.removeAppSource({ bundleId });
-      }
+    this.appWatcher.on("deactivate", async (bundleId) => {
+      await this.audio.removeAppSource({ bundleId });
     });
   }
 
   private async enableListening(): Promise<void> {
+    if (process.platform === "darwin") {
+      const micStatus = systemPreferences.getMediaAccessStatus("microphone");
+      if (micStatus !== "granted") {
+        const granted = await systemPreferences.askForMediaAccess("microphone");
+        if (!granted) {
+          log.warn("microphone permission not granted");
+          sendEvent({
+            type: "error",
+            payload: {
+              where: "microphone",
+              message: "Microphone access is required. Enable it in System Settings → Privacy & Security → Microphone.",
+            },
+          });
+        }
+      }
+    }
+
     this.audio.setListeningActive(true);
     await this.audio.start();
     await this.speech.start();

@@ -16,6 +16,8 @@
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.2</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NoteTaker uses your microphone to transcribe meetings locally on this Mac.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>NoteTaker captures audio from your meeting apps (Zoom, Teams, Slack, etc.) so it can transcribe the other side of the call. System audio never leaves your Mac unless you opt in to a cloud LLM.</string>
 </dict>

@@ -18,5 +18,10 @@ export type SidecarEvent =
   | { type: "source:stopped"; sourceId: string }
   | { type: "pong" };
 
-export const PCM_HEADER_SIZE = 16;
+/** Minimum bytes before source id length is known (idLen + ts + sampleCount). */
+export const PCM_HEADER_MIN_SIZE = 13;
 export const SAMPLE_RATE = 16_000;
+
+export function pcmFrameHeaderSize(sourceIdLen: number): number {
+  return PCM_HEADER_MIN_SIZE + sourceIdLen;
+}

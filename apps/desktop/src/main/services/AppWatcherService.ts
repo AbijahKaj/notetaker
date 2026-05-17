@@ -1,17 +1,15 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
-import { APP_NAMES, BROWSER_BUNDLE_IDS, TypedEmitter, createLogger } from "@notetaker/core";
+import { APP_NAMES, TypedEmitter, createLogger } from "@notetaker/core";
 import type { PreferencesService } from "./PreferencesService.js";
 
 const execFileAsync = promisify(execFile);
 const log = createLogger("app-watcher");
 
-export type WatchedAppKind = "app" | "browser";
-
 type AppWatcherEvents = {
-  activate: [bundleId: string, name: string, kind: WatchedAppKind];
-  deactivate: [bundleId: string, kind: WatchedAppKind];
+  activate: [bundleId: string, name: string];
+  deactivate: [bundleId: string];
 };
 
 const APP_PATHS: Record<string, string> = {
@@ -26,7 +24,7 @@ const APP_PATHS: Record<string, string> = {
 export class AppWatcherService extends TypedEmitter<AppWatcherEvents> {
   private prefs: PreferencesService;
   private interval: ReturnType<typeof setInterval> | null = null;
-  private activeApps = new Map<string, WatchedAppKind>();
+  private activeApps = new Set<string>();
 
   constructor(prefs: PreferencesService) {
     super();
@@ -45,8 +43,8 @@ export class AppWatcherService extends TypedEmitter<AppWatcherEvents> {
       clearInterval(this.interval);
       this.interval = null;
     }
-    for (const [bundleId, kind] of this.activeApps) {
-      this.emit("deactivate", bundleId, kind);
+    for (const bundleId of this.activeApps) {
+      this.emit("deactivate", bundleId);
     }
     this.activeApps.clear();
     log.info("app watcher stopped");
@@ -69,33 +67,20 @@ export class AppWatcherService extends TypedEmitter<AppWatcherEvents> {
     }));
   }
 
-  private watchedTargets(): { bundleId: string; kind: WatchedAppKind }[] {
-    const prefs = this.prefs.get();
-    const targets: { bundleId: string; kind: WatchedAppKind }[] = prefs.appWhitelist.map((bundleId) => ({
-      bundleId,
-      kind: "app" as const,
-    }));
-    if (prefs.siteWhitelist.length > 0) {
-      for (const bundleId of BROWSER_BUNDLE_IDS) {
-        targets.push({ bundleId, kind: "browser" });
-      }
-    }
-    return targets;
-  }
-
   private async poll(): Promise<void> {
+    const whitelist = new Set(this.prefs.get().appWhitelist);
     const running = await this.getRunningApps();
 
-    for (const { bundleId, kind } of this.watchedTargets()) {
+    for (const bundleId of whitelist) {
       const isRunning = running.has(bundleId);
       const wasActive = this.activeApps.has(bundleId);
 
       if (isRunning && !wasActive) {
-        this.activeApps.set(bundleId, kind);
-        this.emit("activate", bundleId, APP_NAMES[bundleId] ?? bundleId, kind);
+        this.activeApps.add(bundleId);
+        this.emit("activate", bundleId, APP_NAMES[bundleId] ?? bundleId);
       } else if (!isRunning && wasActive) {
         this.activeApps.delete(bundleId);
-        this.emit("deactivate", bundleId, kind);
+        this.emit("deactivate", bundleId);
       }
     }
   }

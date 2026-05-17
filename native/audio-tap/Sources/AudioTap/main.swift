@@ -98,42 +98,52 @@ final class MicSource: AudioSource {
     func start() throws {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
-        guard let outFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: targetRate,
-            channels: 1,
-            interleaved: false
-        ) else { throw AudioTapError.coreAudioError("format", -1) }
-
-        let converter = AVAudioConverter(from: format, to: outFormat)!
 
         input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
-            guard let self else { return }
-            let outFrameCount = AVAudioFrameCount(
-                Double(buffer.frameLength) * self.targetRate / format.sampleRate
-            )
-            guard let outBuffer = AVAudioPCMBuffer(
-                pcmFormat: converter.outputFormat,
-                frameCapacity: outFrameCount
-            ) else { return }
+            guard let self,
+                  let channelData = buffer.floatChannelData?[0] else { return }
+            let count = Int(buffer.frameLength)
+            guard count > 0 else { return }
 
-            var error: NSError?
-            converter.convert(to: outBuffer, error: &error) { _, outStatus in
-                outStatus.pointee = .haveData
-                return buffer
-            }
-
-            if let channelData = outBuffer.floatChannelData?[0] {
-                let count = Int(outBuffer.frameLength)
-                let samples = Array(UnsafeBufferPointer(start: channelData, count: count))
-                self.writer.write(
-                    sourceId: self.id,
-                    samples: samples,
-                    tsMs: Int64(Date().timeIntervalSince1970 * 1000)
+            let samples: [Float]
+            if abs(format.sampleRate - self.targetRate) < 1 {
+                samples = Array(UnsafeBufferPointer(start: channelData, count: count))
+            } else {
+                samples = Self.resample(
+                    channelData,
+                    count: count,
+                    fromRate: format.sampleRate,
+                    toRate: self.targetRate
                 )
             }
+
+            self.writer.write(
+                sourceId: self.id,
+                samples: samples,
+                tsMs: Int64(Date().timeIntervalSince1970 * 1000)
+            )
         }
         try engine.start()
+    }
+
+    private static func resample(
+        _ data: UnsafePointer<Float>,
+        count: Int,
+        fromRate: Double,
+        toRate: Double
+    ) -> [Float] {
+        let ratio = toRate / fromRate
+        let outCount = max(1, Int(Double(count) * ratio))
+        var out = [Float](repeating: 0, count: outCount)
+        for i in 0..<outCount {
+            let srcPos = Double(i) / ratio
+            let idx = min(Int(srcPos), count - 1)
+            let frac = Float(srcPos - Double(idx))
+            let a = data[idx]
+            let b = data[min(idx + 1, count - 1)]
+            out[i] = a + (b - a) * frac
+        }
+        return out
     }
 
     func stop() {
@@ -300,15 +310,16 @@ final class SocketWriter {
 
         let idBytes = Array(sourceId.utf8.prefix(63))
         let idLen = UInt8(idBytes.count)
+        let headerSize = 13 + Int(idLen)
 
-        var header = Data(count: 16)
+        var header = Data(count: headerSize)
         header[0] = idLen
         for (i, b) in idBytes.enumerated() { header[1 + i] = b }
 
         var ts = tsMs.bigEndian
         withUnsafeBytes(of: &ts) { header.replaceSubrange((1 + Int(idLen))..<(9 + Int(idLen)), with: $0) }
         var count = UInt32(samples.count).bigEndian
-        withUnsafeBytes(of: &count) { header.replaceSubrange((9 + Int(idLen))..<(13 + Int(idLen)), with: $0) }
+        withUnsafeBytes(of: &count) { header.replaceSubrange((9 + Int(idLen))..<headerSize, with: $0) }
 
         var pcmData = Data(count: samples.count * 4)
         for (i, s) in samples.enumerated() {

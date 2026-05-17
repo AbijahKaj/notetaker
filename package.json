@@ -8,7 +8,7 @@
     "node": ">=20.10.0"
   },
   "scripts": {
-    "dev": "pnpm --filter desktop dev",
+    "dev": "node scripts/dev.mjs",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",

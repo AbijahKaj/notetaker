@@ -38,14 +38,6 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
     archive: true,
   },
   {
-    id: "whisper-large-v3-turbo",
-    required: false,
-    sizeBytes: 1_600_000_000,
-    url: `${RELEASE}/asr-models/sherpa-onnx-whisper-turbo.tar.bz2`,
-    installPath: "sherpa-onnx-whisper-turbo",
-    archive: true,
-  },
-  {
     id: "llama-3.2-3b-mlx",
     required: false,
     sizeBytes: 2_000_000_000,

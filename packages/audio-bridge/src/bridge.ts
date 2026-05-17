@@ -13,7 +13,13 @@ import {
   SAMPLE_RATE,
   type PipelineEvents,
 } from "@notetaker/core";
-import { PCM_HEADER_SIZE, type SidecarCommand, type SidecarEvent, type SidecarSource } from "./protocol.js";
+import {
+  PCM_HEADER_MIN_SIZE,
+  pcmFrameHeaderSize,
+  type SidecarCommand,
+  type SidecarEvent,
+  type SidecarSource,
+} from "./protocol.js";
 
 const log = createLogger("audio-bridge");
 
@@ -111,15 +117,18 @@ export class AudioBridge extends TypedEmitter<PipelineEvents> {
 
         socket.on("data", (chunk) => {
           headerBuf = Buffer.concat([headerBuf, chunk]);
-          while (headerBuf.length >= PCM_HEADER_SIZE) {
+          while (headerBuf.length >= PCM_HEADER_MIN_SIZE) {
             const sourceIdLen = headerBuf.readUInt8(0);
+            const headerSize = pcmFrameHeaderSize(sourceIdLen);
+            if (headerBuf.length < headerSize) break;
+
             const sourceId = headerBuf.subarray(1, 1 + sourceIdLen).toString("utf8");
             const tsMs = Number(headerBuf.readBigUInt64BE(1 + sourceIdLen));
             const sampleCount = headerBuf.readUInt32BE(9 + sourceIdLen);
-            const totalSize = PCM_HEADER_SIZE + sampleCount * 4;
+            const totalSize = headerSize + sampleCount * 4;
             if (headerBuf.length < totalSize) break;
 
-            const pcmBuf = headerBuf.subarray(PCM_HEADER_SIZE, totalSize);
+            const pcmBuf = headerBuf.subarray(headerSize, totalSize);
             const pcm = new Float32Array(sampleCount);
             for (let i = 0; i < sampleCount; i++) {
               pcm[i] = pcmBuf.readFloatLE(i * 4);
@@ -187,8 +196,10 @@ export class AudioBridge extends TypedEmitter<PipelineEvents> {
         reject(err);
       });
 
-      this.sidecar.on("exit", (code) => {
-        log.info("sidecar exited", { code });
+      this.sidecar.on("exit", (code, signal) => {
+        log.error("sidecar exited unexpectedly", { code, signal });
+        this.running = false;
+        this.sidecar = null;
         if (!ready) {
           clearTimeout(timeout);
           reject(new Error(`Sidecar exited with code ${code}`));
