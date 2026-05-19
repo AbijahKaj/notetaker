@@ -1,6 +1,8 @@
-# Always-On Mac Note Taker
+# NoteTaker
 
-A privacy-first, Granola-style meeting note taker for macOS. Microphone stays on always; system audio is captured only from a curated whitelist of meeting apps and a user-editable list of meeting websites detected via AppleScript polling. Local speech-to-text (Parakeet TDT v3) plus local speaker diarization. Summaries are produced by your choice of cloud LLM (Anthropic, OpenAI, OpenRouter) or a small local MLX model downloaded during onboarding.
+A privacy-first meeting note taker for macOS. Turn on listening when you want to capture a meeting — speech recognition runs locally on your Mac. System audio is captured from whitelisted meeting apps (Zoom, Teams, Slack, etc.) and from browser tabs when a whitelisted meeting site is active (e.g. meet.google.com). Summaries use your choice of cloud LLM (Anthropic, OpenAI, OpenRouter) or an optional local MLX model.
+
+Licensed under the [Apache License 2.0](LICENSE).
 
 ## Requirements
 
@@ -11,18 +13,26 @@ A privacy-first, Granola-style meeting note taker for macOS. Microphone stays on
 - Xcode 15+ with Swift 5.9+ (to build the audio-tap sidecar)
 - Python 3.11+ (only if you want the local MLX summarizer)
 
-## Quick start
+## Quick start (from source)
 
 ```bash
 pnpm install
 pnpm sidecar:build         # macOS only — builds native/audio-tap
-pnpm models:download       # downloads required STT and diarization models
+pnpm models:download       # downloads required STT and diarization models (~580 MB)
 pnpm dev                   # runs the Electron app
 ```
 
-## Distribution
+On first run the onboarding wizard requests microphone, system-audio, and browser automation permissions, lets you pick meeting apps and sites, and guides you through downloading speech models and optional LLM setup.
 
-Build installers for all platforms (CI does this automatically on `v*` tags):
+## Download a release
+
+Pre-built installers are published on [GitHub Releases](https://github.com/AbijahKaj/notetaker/releases) when a version tag is pushed (e.g. `v0.1.0`).
+
+**macOS** is the supported platform — full feature set (mic, per-app system audio, browser tab detection).
+
+**Windows / Linux** builds are experimental. The app may install but native system-audio capture requires macOS 14.2+.
+
+## Build installers locally
 
 ```bash
 pnpm -r build
@@ -32,17 +42,24 @@ pnpm --filter desktop package:win     # .exe (NSIS + portable)
 pnpm --filter desktop package:linux   # .AppImage + .deb
 ```
 
+For signed macOS distribution, add GitHub Actions secrets: `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`.
+
+## CI and releases
+
 GitHub Actions:
-- **CI** (`ci.yml`) — typecheck/build on every push to main
-- **Release** (`release.yml`) — builds mac/win/linux artifacts on tag push `v*` (e.g. `v0.1.0`) and uploads to GitHub Releases
 
-For signed macOS distribution, add secrets: `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`.
+- **CI** (`ci.yml`) — typecheck and build on pull requests and pushes to main
+- **Release** (`release.yml`) — builds mac/win/linux artifacts on tag push `v*` and uploads to GitHub Releases
 
-**Platform notes:**
-- **macOS**: full feature set (mic + per-app system audio + browser tab detection)
-- **Windows / Linux**: app runs; native system-audio capture requires macOS 14.2+. Mic preview works via Web Audio in onboarding.
+## Privacy
 
-On first run the onboarding wizard will request microphone and system-audio permissions, let you pick which meeting apps and sites to watch, and optionally guide you through downloading an LLM (cloud key or local MLX bundle).
+- Speech-to-text runs locally; audio is not sent to the cloud for transcription
+- Cloud LLM providers receive transcript text only if you configure an API key
+- API keys and the database encryption key are stored in the macOS Keychain
+- Transcripts and notes are stored in an encrypted local SQLite database by default
+- No telemetry or analytics
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines. Report security issues via [GitHub Security Advisories](https://github.com/AbijahKaj/notetaker/security/advisories/new).
 
 ## Repository layout
 
@@ -54,12 +71,12 @@ packages/
   audio-bridge/             TypeScript wrapper around the Swift CoreAudio sidecar
   speech/                   VAD, language ID, STT, diarization (sherpa-onnx-node)
   llm/                      Summarizer interface + Anthropic/OpenAI/OpenRouter/MLX adapters
-  storage/                  SQLite schema, migrations, FTS, encryption
+  storage/                  SQLite schema, migrations, FTS, export
 native/
   audio-tap/                Swift binary using AudioHardwareCreateProcessTap
   mlx-summarizer/           Optional Python MLX sidecar (Llama 3.2 3B 4-bit)
 scripts/
-  download-models.ts        Onboarding model fetch with SHA256 verification
+  download-models.ts        Model fetch for onboarding and CLI
   build-sidecar.sh          Build the Swift audio tap binary
 ```
 

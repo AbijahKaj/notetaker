@@ -15,7 +15,7 @@ module.exports = {
   productName: "NoteTaker",
   directories: {
     output: "release",
-    buildResources: "build",
+    buildResources: "resources",
   },
   files: [
     "out/**/*",
@@ -27,8 +27,8 @@ module.exports = {
     target: ["dmg", "zip"],
     hardenedRuntime: true,
     gatekeeperAssess: false,
-    entitlements: "build/entitlements.mac.plist",
-    entitlementsInherit: "build/entitlements.mac.plist",
+    entitlements: "resources/entitlements.mac.plist",
+    entitlementsInherit: "resources/entitlements.mac.plist",
     extendInfo: {
       NSMicrophoneUsageDescription:
         "NoteTaker uses your microphone to transcribe meetings locally on this Mac.",
@@ -49,6 +49,7 @@ module.exports = {
   linux: {
     target: ["AppImage", "deb"],
     category: "Office",
+    maintainer: "Abijah Kajabika",
   },
   nsis: {
     oneClick: false,

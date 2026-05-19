@@ -52,6 +52,6 @@ Expected gains: ~110x realtime on M4 Pro Neural Engine vs ~32x on ONNX CPU, with
 ## Security
 
 - API keys stored in macOS Keychain via `keytar`
-- SQLite encryption key in Keychain (PRAGMA key when encryptDb enabled)
+- SQLite database encrypted at rest with SQLCipher (key in Keychain when `encryptDb` enabled)
 - No raw audio persisted by default
 - Logger redacts API keys and tokens

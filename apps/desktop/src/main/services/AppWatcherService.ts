@@ -1,7 +1,15 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
-import { APP_NAMES, TypedEmitter, createLogger } from "@notetaker/core";
+import {
+  APP_NAMES,
+  APP_PATHS,
+  BROWSER_BUNDLE_IDS,
+  BROWSER_URL_SCRIPTS,
+  TypedEmitter,
+  createLogger,
+  matchSiteWhitelist,
+} from "@notetaker/core";
 import type { PreferencesService } from "./PreferencesService.js";
 
 const execFileAsync = promisify(execFile);
@@ -10,21 +18,15 @@ const log = createLogger("app-watcher");
 type AppWatcherEvents = {
   activate: [bundleId: string, name: string];
   deactivate: [bundleId: string];
-};
-
-const APP_PATHS: Record<string, string> = {
-  "us.zoom.xos": "/Applications/zoom.us.app",
-  "com.microsoft.teams2": "/Applications/Microsoft Teams.app",
-  "com.tinyspeck.slackmacgap": "/Applications/Slack.app",
-  "com.apple.FaceTime": "/System/Applications/FaceTime.app",
-  "com.hnc.Discord": "/Applications/Discord.app",
-  "com.cisco.webexmeetingsapp": "/Applications/Webex.app",
+  browserActivate: [bundleId: string, matchedSite: string, name: string];
+  browserDeactivate: [bundleId: string];
 };
 
 export class AppWatcherService extends TypedEmitter<AppWatcherEvents> {
   private prefs: PreferencesService;
   private interval: ReturnType<typeof setInterval> | null = null;
   private activeApps = new Set<string>();
+  private activeBrowsers = new Map<string, string>();
 
   constructor(prefs: PreferencesService) {
     super();
@@ -47,6 +49,10 @@ export class AppWatcherService extends TypedEmitter<AppWatcherEvents> {
       this.emit("deactivate", bundleId);
     }
     this.activeApps.clear();
+    for (const bundleId of this.activeBrowsers.keys()) {
+      this.emit("browserDeactivate", bundleId);
+    }
+    this.activeBrowsers.clear();
     log.info("app watcher stopped");
   }
 
@@ -68,6 +74,11 @@ export class AppWatcherService extends TypedEmitter<AppWatcherEvents> {
   }
 
   private async poll(): Promise<void> {
+    await this.pollApps();
+    await this.pollBrowsers();
+  }
+
+  private async pollApps(): Promise<void> {
     const whitelist = new Set(this.prefs.get().appWhitelist);
     const running = await this.getRunningApps();
 
@@ -82,6 +93,54 @@ export class AppWatcherService extends TypedEmitter<AppWatcherEvents> {
         this.activeApps.delete(bundleId);
         this.emit("deactivate", bundleId);
       }
+    }
+  }
+
+  private async pollBrowsers(): Promise<void> {
+    if (!this.prefs.get().automationGranted) return;
+
+    const sites = this.prefs.get().siteWhitelist;
+    if (sites.length === 0) return;
+
+    const running = await this.getRunningApps();
+
+    for (const bundleId of BROWSER_BUNDLE_IDS) {
+      const isRunning = running.has(bundleId);
+
+      if (!isRunning) {
+        if (this.activeBrowsers.has(bundleId)) {
+          this.activeBrowsers.delete(bundleId);
+          this.emit("browserDeactivate", bundleId);
+        }
+        continue;
+      }
+
+      const url = await this.getBrowserUrl(bundleId);
+      const matchedSite = url ? matchSiteWhitelist(url, sites) : null;
+      const wasActive = this.activeBrowsers.has(bundleId);
+
+      if (matchedSite && !wasActive) {
+        this.activeBrowsers.set(bundleId, matchedSite);
+        this.emit("browserActivate", bundleId, matchedSite, APP_NAMES[bundleId] ?? bundleId);
+      } else if (!matchedSite && wasActive) {
+        this.activeBrowsers.delete(bundleId);
+        this.emit("browserDeactivate", bundleId);
+      } else if (matchedSite) {
+        this.activeBrowsers.set(bundleId, matchedSite);
+      }
+    }
+  }
+
+  private async getBrowserUrl(bundleId: string): Promise<string | null> {
+    const script = BROWSER_URL_SCRIPTS[bundleId];
+    if (!script) return null;
+
+    try {
+      const { stdout } = await execFileAsync("osascript", ["-e", script]);
+      const url = stdout.trim();
+      return url.startsWith("http") ? url : null;
+    } catch {
+      return null;
     }
   }
 

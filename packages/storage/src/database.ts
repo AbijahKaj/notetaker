@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import BetterSqlite3 from "better-sqlite3";
+import type { SqliteDatabase } from "./openDatabase.js";
+import { openDatabase } from "./openDatabase.js";
 import type {
   MeetingSummary,
   Session,
@@ -18,15 +19,10 @@ export interface DatabaseOptions {
 }
 
 export class NoteTakerDatabase {
-  private db: BetterSqlite3.Database;
+  private db: SqliteDatabase;
 
   constructor(opts: DatabaseOptions) {
-    this.db = new BetterSqlite3(opts.dbPath);
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
-    if (opts.encryptionKey) {
-      this.db.pragma(`key = '${opts.encryptionKey.replace(/'/g, "''")}'`);
-    }
+    this.db = openDatabase({ dbPath: opts.dbPath, encryptionKey: opts.encryptionKey });
     this.migrate();
   }
 

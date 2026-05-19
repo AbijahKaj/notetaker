@@ -118,6 +118,13 @@ class Application {
     this.appWatcher.on("deactivate", async (bundleId) => {
       await this.audio.removeAppSource({ bundleId });
     });
+    this.appWatcher.on("browserActivate", async (bundleId, matchedSite, name) => {
+      await this.audio.addBrowserSource({ bundleId, matchedSite });
+      log.info("browser meeting tab active", { bundleId, matchedSite, name });
+    });
+    this.appWatcher.on("browserDeactivate", async (bundleId) => {
+      await this.audio.removeBrowserSource({ bundleId });
+    });
   }
 
   private async enableListening(): Promise<void> {
@@ -178,8 +185,17 @@ class Application {
   private wireIpc(): void {
     handle<"preferences:get">("preferences:get", () => this.prefs.get());
     handle<"preferences:set">("preferences:set", async (patch) => {
+      const prev = this.prefs.get();
       const next = await this.prefs.update(patch);
       this.appWatcher.refreshWhitelist();
+      if (patch.encryptDb !== undefined && patch.encryptDb !== prev.encryptDb) {
+        try {
+          await this.storage.reconfigureEncryption();
+        } catch (err) {
+          await this.prefs.update({ encryptDb: prev.encryptDb });
+          throw new Error(`Database encryption change failed: ${String(err)}`);
+        }
+      }
       if (patch.automationGranted && this.prefs.get().listeningEnabled) {
         this.appWatcher.start();
       }

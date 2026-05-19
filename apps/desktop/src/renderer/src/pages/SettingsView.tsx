@@ -166,14 +166,6 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
         <label className="settings-toggle">
           <input
             type="checkbox"
-            checked={prefs.launchAtLogin}
-            onChange={(e) => update({ launchAtLogin: e.target.checked })}
-          />
-          <span>Launch at login</span>
-        </label>
-        <label className="settings-toggle">
-          <input
-            type="checkbox"
             checked={prefs.liveTranscript}
             onChange={(e) => update({ liveTranscript: e.target.checked })}
           />
@@ -185,7 +177,16 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
             checked={prefs.encryptDb}
             onChange={(e) => update({ encryptDb: e.target.checked })}
           />
-          <span>Encrypt local database</span>
+          <span>Encrypt local database (key stored in Keychain)</span>
+        </label>
+        <label className="settings-toggle" style={{ opacity: 0.5 }} title="Not yet available">
+          <input
+            type="checkbox"
+            checked={prefs.launchAtLogin}
+            disabled
+            readOnly
+          />
+          <span>Launch at login (coming soon)</span>
         </label>
       </div>
     </div>

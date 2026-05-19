@@ -1,16 +1,18 @@
 import { join } from "node:path";
-import { NoteTakerDatabase } from "@notetaker/storage";
+import { NoteTakerDatabase, reconfigureDatabaseEncryption } from "@notetaker/storage";
 import type { LlmKeyService } from "./LlmKeyService.js";
 import type { PreferencesService } from "./PreferencesService.js";
 
 export class StorageService {
   private db: NoteTakerDatabase | null = null;
   private userDataDir: string;
+  private dbPath: string;
   private llmKeys: LlmKeyService | null = null;
   private prefs: PreferencesService | null = null;
 
   constructor(userDataDir: string) {
     this.userDataDir = userDataDir;
+    this.dbPath = join(userDataDir, "notetaker.db");
   }
 
   setKeyService(llmKeys: LlmKeyService, prefs: PreferencesService): void {
@@ -19,14 +21,35 @@ export class StorageService {
   }
 
   async init(): Promise<void> {
-    const dbPath = join(this.userDataDir, "notetaker.db");
-    let encryptionKey: string | undefined;
+    await this.open();
+  }
 
-    if (this.prefs?.get().encryptDb && this.llmKeys) {
-      encryptionKey = await this.llmKeys.getOrCreateDbKey();
+  private async resolveEncryptionKey(): Promise<string | undefined> {
+    if (!this.prefs?.get().encryptDb) return undefined;
+    if (!this.llmKeys) {
+      throw new Error("Database encryption requires the key service");
+    }
+    return this.llmKeys.getOrCreateDbKey();
+  }
+
+  private async open(): Promise<void> {
+    const encryptionKey = await this.resolveEncryptionKey();
+    this.db = new NoteTakerDatabase({ dbPath: this.dbPath, encryptionKey });
+  }
+
+  async reconfigureEncryption(): Promise<void> {
+    if (!this.prefs || !this.llmKeys) {
+      throw new Error("Storage not configured");
     }
 
-    this.db = new NoteTakerDatabase({ dbPath, encryptionKey });
+    const enable = this.prefs.get().encryptDb;
+    const key = await this.llmKeys.getOrCreateDbKey();
+
+    this.db?.close();
+    this.db = null;
+
+    reconfigureDatabaseEncryption(this.dbPath, key, enable);
+    await this.open();
   }
 
   getDb(): NoteTakerDatabase {

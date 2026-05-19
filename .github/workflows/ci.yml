@@ -1,8 +1,8 @@
 name: CI
 
 on:
-  # push:
-  #   branches: [main, master]
+  push:
+    branches: [main, master]
   pull_request:
     branches: [main, master]
 
@@ -25,6 +25,7 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
       - run: pnpm -r build
       - run: pnpm --filter desktop build
 
