@@ -19,6 +19,16 @@ module.exports = {
   },
   files: [
     "out/**/*",
+    // TypeScript dev artifacts shipped by our workspace packages — not
+    // needed at runtime and the .d.ts.map files trip electron-builder's
+    // realpath check under pnpm's symlinked node_modules.
+    "!**/*.d.ts",
+    "!**/*.d.ts.map",
+    "!**/*.ts",
+    "!**/*.tsx",
+    "!**/*.map",
+    "!**/tsconfig*.json",
+    "!**/*.tsbuildinfo",
     "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
     "!**/node_modules/.bin",
   ],

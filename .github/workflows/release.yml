@@ -1,20 +1,31 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "Semver bump"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: macos-latest
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: pnpm/action-setup@v4
 
@@ -23,8 +34,35 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Bump version
+        id: bump
+        run: |
+          cd apps/desktop
+          NEW_VERSION=$(npm version ${{ inputs.bump }} --no-git-tag-version)
+          NEW_VERSION=${NEW_VERSION#v}
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$NEW_VERSION"
+          cd ../..
+          # Sync root package.json version if it has one
+          node -e "
+            const fs = require('fs');
+            const root = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            if (root.version !== undefined) {
+              root.version = '$NEW_VERSION';
+              fs.writeFileSync('package.json', JSON.stringify(root, null, 2) + '\n');
+            }
+          "
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Commit and push version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json apps/desktop/package.json pnpm-lock.yaml
+          git commit -m "chore: release v${{ steps.bump.outputs.version }}"
+          git push origin HEAD:main
 
       - name: Build packages
         run: pnpm -r build
@@ -35,6 +73,10 @@ jobs:
       - name: Rebuild native modules for Electron
         run: pnpm --filter desktop exec electron-builder install-app-deps
 
+      # electron-builder reads the version from apps/desktop/package.json and
+      # creates a GitHub release tagged v<version>. The tag is created by the
+      # GitHub Releases API itself, pointing at the version-bump commit we
+      # just pushed.
       - name: Package, sign, notarize, and publish macOS app
         run: pnpm --filter desktop package:mac --publish always
         env:
@@ -50,7 +92,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: notetaker-mac
+          name: notetaker-mac-v${{ steps.bump.outputs.version }}
           path: |
             apps/desktop/release/*.dmg
             apps/desktop/release/*.zip
