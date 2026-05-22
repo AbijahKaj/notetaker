@@ -34,12 +34,13 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const [models, setModels] = useState<{ id: string; required: boolean; installed: boolean; sizeBytes: number }[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
   const [modelPhases, setModelPhases] = useState<Record<string, ModelPhase>>({});
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("anthropic");
   const [llmModel, setLlmModel] = useState(defaultLlmModel("anthropic"));
   const [apiKey, setApiKey] = useState("");
   const [testDone, setTestDone] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
+  const [testPhase, setTestPhase] = useState<"idle" | "warming" | "listening" | "running">("idle");
+  const [testCountdown, setTestCountdown] = useState<number | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const isMac = typeof navigator !== "undefined" && navigator.platform.toLowerCase().includes("mac");
@@ -170,32 +171,54 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
     setDownloading(true);
     setDownloadError(null);
     const required = models.filter((m) => m.required && !m.installed);
-    try {
-      for (const m of required) {
-        setDownloadingId(m.id);
-        setDownloadProgress((prev) => ({ ...prev, [m.id]: 0 }));
-        setModelPhases((prev) => ({ ...prev, [m.id]: "downloading" }));
+    if (required.length === 0) {
+      setDownloading(false);
+      return;
+    }
+
+    setDownloadProgress((prev) => {
+      const next = { ...prev };
+      for (const m of required) next[m.id] = 0;
+      return next;
+    });
+    setModelPhases((prev) => {
+      const next = { ...prev };
+      for (const m of required) next[m.id] = "downloading";
+      return next;
+    });
+
+    const failures: { id: string; err: unknown }[] = [];
+
+    await Promise.all(
+      required.map(async (m) => {
         try {
           await api().invoke("models:download", m.id);
           setModelPhases((prev) => ({ ...prev, [m.id]: "done" }));
           setDownloadProgress((prev) => ({ ...prev, [m.id]: 1 }));
-          const updated = await api().invoke("models:status");
-          setModels(updated);
         } catch (err) {
-          setDownloadError(`Failed on ${m.id}. Check your connection and try again. (${String(err)})`);
+          failures.push({ id: m.id, err });
           setModelPhases((prev) => {
             const next = { ...prev };
             delete next[m.id];
             return next;
           });
-          return;
         }
-      }
+      }),
+    );
+
+    const updated = await api().invoke("models:status");
+    setModels(updated);
+
+    if (failures.length > 0) {
+      const ids = failures.map((f) => f.id).join(", ");
+      setDownloadError(
+        `Failed to download: ${ids}. Check your connection and click Retry.`,
+      );
+    } else {
       await api().invoke("window:show");
-    } finally {
-      setDownloadingId(null);
-      setDownloading(false);
     }
+
+    setDownloading(false);
   };
 
   const saveLlm = async () => {
@@ -216,31 +239,58 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
 
   const runTest = async () => {
     setTestError(null);
+    setTestPhase("running");
+
+    let firstTranscriptResolve: (() => void) | null = null;
+    const firstTranscript = new Promise<void>((resolve) => {
+      firstTranscriptResolve = resolve;
+    });
     let sawTranscript = false;
     const unsub = api().on((evt) => {
       if (evt.type === "transcript:segment" && evt.payload.text.trim().length > 2) {
         sawTranscript = true;
+        firstTranscriptResolve?.();
       }
     });
 
     const before = await api().invoke("listening:get");
-    if (!before.enabled) {
-      await api().invoke("listening:toggle");
+
+    try {
+      // Toggle on (heavy: loads sherpa/parakeet — can take several seconds the first time).
+      setTestPhase("warming");
+      if (!before.enabled) {
+        await api().invoke("listening:toggle");
+      }
+
+      // Engine is loaded — give the user a clear visual cue and a countdown.
+      setTestPhase("listening");
+      const totalSeconds = 10;
+      setTestCountdown(totalSeconds);
+      const tickHandle = setInterval(() => {
+        setTestCountdown((prev) => (prev === null ? null : Math.max(0, prev - 1)));
+      }, 1000);
+
+      const timeout = new Promise<void>((resolve) =>
+        setTimeout(resolve, totalSeconds * 1000),
+      );
+      await Promise.race([firstTranscript, timeout]);
+      clearInterval(tickHandle);
+      setTestCountdown(null);
+    } finally {
+      await api().invoke("sessions:endActive").catch(() => {});
+      if (!before.enabled) {
+        await api().invoke("listening:toggle").catch(() => {});
+      }
+      unsub();
+      setTestPhase("idle");
     }
-
-    await new Promise((r) => setTimeout(r, 8000));
-    await api().invoke("sessions:endActive");
-
-    if (!before.enabled) {
-      await api().invoke("listening:toggle");
-    }
-
-    unsub();
 
     if (sawTranscript) {
       setTestDone(true);
     } else {
-      setTestError("No transcript detected. Check microphone permission and speak clearly during the test.");
+      setTestError(
+        "No transcript detected. Make sure mic access is granted in System Settings, then try again and speak clearly.",
+      );
     }
   };
 
@@ -266,22 +316,25 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
 
   const formatPct = (pct: number) => `${Math.round(pct * 100)}%`;
 
-  const activePhase = downloadingId ? modelPhases[downloadingId] : undefined;
+  const inFlightModels = requiredModels.filter((m) => {
+    const phase = modelPhases[m.id];
+    return !m.installed && phase && phase !== "done";
+  });
+  const anyExtracting = inFlightModels.some(
+    (m) => modelPhases[m.id] === "extracting" || modelPhases[m.id] === "finishing",
+  );
 
   const activeStatusLabel = (() => {
-    if (!downloadingId) return "Preparing download…";
-    const phase = activePhase ?? "downloading";
-    const name = downloadingId;
-    if (phase === "extracting") {
-      return `Extracting ${name}… (large archives can take up to a minute)`;
+    if (!downloading) return "Preparing download…";
+    if (inFlightModels.length === 0) return "Finishing up…";
+    if (inFlightModels.length === 1) {
+      const m = inFlightModels[0]!;
+      const phase = modelPhases[m.id];
+      if (phase === "extracting") return `Extracting ${m.id}…`;
+      if (phase === "finishing") return `Installing ${m.id}…`;
+      return `Downloading ${m.id}… ${formatPct(downloadProgress[m.id] ?? 0)}`;
     }
-    if (phase === "finishing") return `Installing ${name}…`;
-    if (phase === "downloading") {
-      const pct = formatPct(downloadProgress[downloadingId] ?? 0);
-      return `Downloading ${name}… ${pct}`;
-    }
-    if (phase === "done") return `${name} ready`;
-    return `Working on ${name}…`;
+    return `Downloading ${inFlightModels.length} models in parallel…`;
   })();
 
   const modelBadge = (m: (typeof models)[number]) => {
@@ -472,7 +525,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
                 </div>
                 <div className="progress-bar">
                   <div
-                    className={`progress-bar-fill${activePhase === "extracting" ? " progress-bar-fill-pulse" : ""}`}
+                    className={`progress-bar-fill${anyExtracting ? " progress-bar-fill-pulse" : ""}`}
                     style={{ width: `${overallProgress * 100}%` }}
                   />
                 </div>
@@ -482,7 +535,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             {models.map((m) => {
               const progress = downloadProgress[m.id];
               const phase = modelPhases[m.id];
-              const isActive = downloadingId === m.id;
+              const isActive = downloading && !!phase && phase !== "done";
               const showDownloadBar = phase === "downloading" && progress !== undefined;
               const showExtractBar = phase === "extracting" || phase === "finishing";
 
@@ -492,7 +545,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
                     <span>{m.id}</span>
                     {modelBadge(m)}
                   </div>
-                  {isActive && phase && phase !== "done" && (
+                  {isActive && phase && (
                     <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--text-muted)" }}>
                       {MODEL_PHASE_LABEL[phase]}
                       {phase === "downloading" ? ` ${formatPct(progress ?? 0)}` : "…"}
@@ -512,11 +565,9 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             <div className="onboarding-actions">
               <button className="btn btn-ghost" onClick={downloadRequiredModels} disabled={downloading || requiredPending.length === 0}>
                 {downloading
-                  ? activePhase === "extracting"
+                  ? anyExtracting
                     ? "Extracting…"
-                    : activePhase === "finishing"
-                      ? "Installing…"
-                      : "Downloading…"
+                    : "Downloading…"
                   : requiredPending.length === 0
                     ? "All required installed"
                     : "Download required"}
@@ -581,17 +632,57 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
                 <span className="badge badge-success">Test complete</span>
                 <p style={{ marginTop: 8, fontSize: 13 }}>Transcription pipeline is working.</p>
               </div>
+            ) : testPhase === "warming" ? (
+              <div className="card">
+                <p style={{ fontSize: 13, marginBottom: 8 }}>
+                  Loading speech engine… first time can take 5–15 seconds while Parakeet is loaded into memory.
+                </p>
+                <div className="progress-bar progress-bar-indeterminate" />
+              </div>
+            ) : testPhase === "listening" ? (
+              <div className="card">
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  <span style={{
+                    width: 10, height: 10, borderRadius: "50%",
+                    background: "var(--danger)", boxShadow: "0 0 6px var(--danger)",
+                    animation: "pulse 1.2s ease-in-out infinite",
+                  }} />
+                  <strong style={{ fontSize: 14 }}>Speak now</strong>
+                  {testCountdown !== null && (
+                    <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", color: "var(--text-muted)" }}>
+                      {testCountdown}s
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  Say a sentence — the test ends as soon as a transcript arrives.
+                </p>
+              </div>
             ) : (
               <>
-                <button className="btn btn-primary" onClick={runTest}>Start 8-second test</button>
+                <button className="btn btn-primary" onClick={runTest} disabled={testPhase !== "idle"}>
+                  Start test
+                </button>
                 {testError && (
                   <p style={{ marginTop: 12, fontSize: 13, color: "var(--danger)" }}>{testError}</p>
                 )}
               </>
             )}
             <div className="onboarding-actions">
-              <button className="btn btn-ghost" onClick={() => { setTestDone(true); next(); }}>Skip</button>
-              <button className="btn btn-primary" onClick={next} disabled={!testDone}>Continue</button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => { setTestDone(true); next(); }}
+                disabled={testPhase !== "idle" && !testDone}
+              >
+                Skip
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={next}
+                disabled={!testDone || testPhase !== "idle"}
+              >
+                Continue
+              </button>
             </div>
           </>
         )}

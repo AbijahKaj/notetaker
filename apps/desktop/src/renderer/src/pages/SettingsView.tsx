@@ -1,37 +1,34 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { Preferences, LlmProvider } from "@notetaker/core";
 import { defaultLlmModel, llmModelPlaceholder } from "@notetaker/core/llm-defaults";
 import { api } from "../desktop";
 import { HotkeyInput } from "../components/HotkeyInput";
 
+export interface DetectedApp {
+  bundleId: string;
+  name: string;
+  installed: boolean;
+  running: boolean;
+}
+
 interface SettingsViewProps {
+  prefs: Preferences;
+  apps: DetectedApp[];
+  appVersion: string;
+  onPrefsChange: (next: Preferences) => void;
   onRunSetup?: () => void;
 }
 
 const DEFAULT_TOGGLE_HOTKEY = "CommandOrControl+Shift+L";
 
-export function SettingsView({ onRunSetup }: SettingsViewProps) {
-  const [prefs, setPrefs] = useState<Preferences | null>(null);
+export function SettingsView({ prefs, apps, appVersion, onPrefsChange, onRunSetup }: SettingsViewProps) {
   const [apiKey, setApiKey] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
-  const [apps, setApps] = useState<{ bundleId: string; name: string; installed: boolean; running: boolean }[]>([]);
   const [newSite, setNewSite] = useState("");
   const [updateStatus, setUpdateStatus] = useState<string | null>(null);
-  const [appVersion, setAppVersion] = useState<string>("");
   const [uninstallConfirm, setUninstallConfirm] = useState<"idle" | "armed" | "running">("idle");
   const [uninstallResult, setUninstallResult] = useState<string | null>(null);
-
-  useEffect(() => {
-    void (async () => {
-      const p = await api().invoke("preferences:get");
-      setPrefs(p);
-      const detected = await api().invoke("apps:detected");
-      setApps(detected);
-      const version = await api().invoke("system:appVersion");
-      setAppVersion(version);
-    })();
-  }, []);
 
   const checkForUpdates = async () => {
     setUpdateStatus("Checking…");
@@ -51,14 +48,13 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
     try {
       setSettingsError(null);
       const next = await api().invoke("preferences:set", patch);
-      setPrefs(next);
+      onPrefsChange(next);
     } catch (err) {
       setSettingsError(String(err));
     }
   };
 
   const toggleApp = async (bundleId: string) => {
-    if (!prefs) return;
     const list = prefs.appWhitelist.includes(bundleId)
       ? prefs.appWhitelist.filter((id) => id !== bundleId)
       : [...prefs.appWhitelist, bundleId];
@@ -66,18 +62,17 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
   };
 
   const removeSite = async (site: string) => {
-    if (!prefs) return;
     await update({ siteWhitelist: prefs.siteWhitelist.filter((s) => s !== site) });
   };
 
   const addSite = async () => {
-    if (!prefs || !newSite.trim()) return;
+    if (!newSite.trim()) return;
     await update({ siteWhitelist: [...prefs.siteWhitelist, newSite.trim()] });
     setNewSite("");
   };
 
   const saveApiKey = async () => {
-    if (!prefs || !apiKey) return;
+    if (!apiKey) return;
     const result = await api().invoke("llm:setKey", { provider: prefs.llmProvider, apiKey });
     if (result.ok) setTestResult("API key saved");
     else setTestResult(`Error: ${result.error}`);
@@ -85,7 +80,6 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
   };
 
   const testLlm = async () => {
-    if (!prefs) return;
     setTestResult("Testing…");
     const result = await api().invoke("llm:test", prefs.llmProvider);
     setTestResult(result.ok ? `OK (${result.latencyMs}ms)` : `Failed: ${result.error}`);
@@ -109,8 +103,6 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
       setUninstallConfirm("idle");
     }
   };
-
-  if (!prefs) return <p>Loading…</p>;
 
   return (
     <div style={{ maxWidth: 640 }}>
@@ -179,7 +171,7 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
             </label>
             <input
               value={prefs.llmModel}
-              onChange={(e) => setPrefs({ ...prefs, llmModel: e.target.value })}
+              onChange={(e) => onPrefsChange({ ...prefs, llmModel: e.target.value })}
               onBlur={() => {
                 const llmModel = prefs.llmModel.trim() || defaultLlmModel(prefs.llmProvider);
                 void update({ llmModel });

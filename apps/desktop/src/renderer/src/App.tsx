@@ -1,20 +1,29 @@
 import { useState, useEffect, useCallback } from "react";
-import type { IpcEvent } from "@notetaker/core";
+import type { IpcEvent, Preferences } from "@notetaker/core";
 import type { TranscriptSegment, Session, SessionMeta } from "@notetaker/core";
 import { api } from "./desktop";
 import { Sidebar } from "./components/Sidebar";
 import { SessionView } from "./pages/SessionView";
 import { ReviewView } from "./pages/ReviewView";
-import { SettingsView } from "./pages/SettingsView";
+import { SettingsView, type DetectedApp } from "./pages/SettingsView";
 import { OnboardingView } from "./onboarding/OnboardingView";
 import { SearchView } from "./pages/SearchView";
 
 type Page = "session" | "review" | "settings" | "onboarding" | "search";
 
+function formatBytesPerSecond(bps: number): string {
+  if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} MB/s`;
+  if (bps >= 1_000) return `${(bps / 1_000).toFixed(0)} kB/s`;
+  return `${Math.round(bps)} B/s`;
+}
+
 export function App() {
   const [page, setPage] = useState<Page>("session");
   const [listening, setListening] = useState(false);
-  const [liveTranscript, setLiveTranscript] = useState(true);
+  const [prefs, setPrefs] = useState<Preferences | null>(null);
+  const [detectedApps, setDetectedApps] = useState<DetectedApp[]>([]);
+  const [appVersion, setAppVersion] = useState<string>("");
+  const liveTranscript = prefs?.liveTranscript ?? true;
   const [activeSession, setActiveSession] = useState<Session | null>(null);
   const [reviewSession, setReviewSession] = useState<Session | null>(null);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
@@ -22,18 +31,24 @@ export function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [modelsReady, setModelsReady] = useState(true);
-  const [updateReady, setUpdateReady] = useState<{ version: string } | null>(null);
+  const [updateState, setUpdateState] = useState<
+    | { phase: "idle" }
+    | { phase: "available"; version: string }
+    | { phase: "downloading"; version?: string; percent: number; bytesPerSecond: number }
+    | { phase: "downloaded"; version: string }
+    | { phase: "error"; message: string }
+  >({ phase: "idle" });
 
   useEffect(() => {
     void (async () => {
       const { enabled } = await api().invoke("listening:get");
       setListening(enabled);
-      const prefs = await api().invoke("preferences:get");
-      setLiveTranscript(prefs.liveTranscript);
+      const loadedPrefs = await api().invoke("preferences:get");
+      setPrefs(loadedPrefs);
       const models = await api().invoke("models:status");
       const requiredMissing = models.some((m) => m.required && !m.installed);
       setModelsReady(!requiredMissing);
-      if (!prefs.onboardingCompleted || requiredMissing) {
+      if (!loadedPrefs.onboardingCompleted || requiredMissing) {
         setShowOnboarding(true);
         setPage("onboarding");
       }
@@ -41,6 +56,13 @@ export function App() {
       setActiveSession(active);
       const list = await api().invoke("sessions:list", { limit: 50 });
       setSessions(list);
+      // Settings-only data — fetched once, cached for the lifetime of the app.
+      const [detected, version] = await Promise.all([
+        api().invoke("apps:detected"),
+        api().invoke("system:appVersion"),
+      ]);
+      setDetectedApps(detected);
+      setAppVersion(version);
     })();
 
     const unsub = api().on((evt: IpcEvent) => {
@@ -76,13 +98,27 @@ export function App() {
           setErrorBanner(evt.payload.message);
           break;
         case "preferences:changed":
-          setLiveTranscript(evt.payload.liveTranscript);
+          setPrefs(evt.payload);
           break;
         case "navigate":
           if (evt.payload.hash === "#/settings") setPage("settings");
           break;
+        case "update:available":
+          setUpdateState({ phase: "available", version: evt.payload.version });
+          break;
+        case "update:progress":
+          setUpdateState((prev) => ({
+            phase: "downloading",
+            version: prev.phase === "available" || prev.phase === "downloading" ? prev.version : undefined,
+            percent: evt.payload.percent,
+            bytesPerSecond: evt.payload.bytesPerSecond,
+          }));
+          break;
         case "update:downloaded":
-          setUpdateReady({ version: evt.payload.version });
+          setUpdateState({ phase: "downloaded", version: evt.payload.version });
+          break;
+        case "update:error":
+          setUpdateState({ phase: "error", message: evt.payload.message });
           break;
       }
     });
@@ -149,23 +185,80 @@ export function App() {
           </button>
         </div>
       )}
-      {updateReady && (
+      {updateState.phase !== "idle" && (
         <div className="update-toast" role="status">
-          <span>Version {updateReady.version} is ready to install.</span>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => void api().invoke("update:install")}
-          >
-            Restart &amp; update
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => setUpdateReady(null)}
-          >
-            Later
-          </button>
+          {updateState.phase === "available" && (
+            <>
+              <div className="update-toast-main">
+                <span className="update-toast-title">Update {updateState.version} available</span>
+                <span className="update-toast-sub">Downloading in the background…</span>
+              </div>
+              <div className="update-toast-progress update-toast-progress-indeterminate" />
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setUpdateState({ phase: "idle" })}
+                aria-label="Dismiss update notice"
+              >
+                ×
+              </button>
+            </>
+          )}
+          {updateState.phase === "downloading" && (
+            <>
+              <div className="update-toast-main">
+                <span className="update-toast-title">
+                  Downloading update{updateState.version ? ` ${updateState.version}` : ""}
+                </span>
+                <span className="update-toast-sub">
+                  {Math.round(updateState.percent)}%
+                  {updateState.bytesPerSecond > 0
+                    ? ` · ${formatBytesPerSecond(updateState.bytesPerSecond)}`
+                    : ""}
+                </span>
+              </div>
+              <div className="update-toast-progress">
+                <div
+                  className="update-toast-progress-fill"
+                  style={{ width: `${Math.min(100, Math.max(0, updateState.percent))}%` }}
+                />
+              </div>
+            </>
+          )}
+          {updateState.phase === "downloaded" && (
+            <>
+              <span>Version {updateState.version} is ready to install.</span>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void api().invoke("update:install")}
+              >
+                Restart &amp; update
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setUpdateState({ phase: "idle" })}
+              >
+                Later
+              </button>
+            </>
+          )}
+          {updateState.phase === "error" && (
+            <>
+              <div className="update-toast-main">
+                <span className="update-toast-title">Update failed</span>
+                <span className="update-toast-sub">{updateState.message}</span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setUpdateState({ phase: "idle" })}
+              >
+                Dismiss
+              </button>
+            </>
+          )}
         </div>
       )}
       <div className="app-layout">
@@ -207,7 +300,15 @@ export function App() {
             onDelete={() => handleDeleteSession(reviewSession.id)}
           />
         )}
-        {page === "settings" && <SettingsView onRunSetup={handleRunSetup} />}
+        {page === "settings" && prefs && (
+          <SettingsView
+            prefs={prefs}
+            apps={detectedApps}
+            appVersion={appVersion}
+            onPrefsChange={setPrefs}
+            onRunSetup={handleRunSetup}
+          />
+        )}
         {page === "search" && <SearchView onOpenSession={handleOpenSession} />}
       </main>
       </div>
