@@ -10,7 +10,7 @@ import { createWriteStream, existsSync, mkdirSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { MODEL_CATALOG } from "@notetaker/core";
+import { MODEL_CATALOG, verifyFileSha256 } from "@notetaker/core";
 import { defaultDownloadModelsDir } from "@notetaker/core/models-dir";
 
 const execFileAsync = promisify(execFile);
@@ -69,6 +69,10 @@ async function downloadModel(id: string): Promise<void> {
     writeStream.on("error", reject);
   });
   console.log("");
+
+  if (spec.downloadSha256) {
+    await verifyFileSha256(tmpPath, spec.downloadSha256);
+  }
 
   try {
     if (spec.archive) {

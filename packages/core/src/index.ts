@@ -6,3 +6,4 @@ export * from "./logger.js";
 export * from "./ipc.js";
 export * from "./modelCatalog.js";
 export * from "./llmDefaults.js";
+export * from "./hash.js";

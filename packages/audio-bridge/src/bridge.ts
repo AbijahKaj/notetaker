@@ -23,27 +23,54 @@ import {
 
 const log = createLogger("audio-bridge");
 
+type BridgeEvents = PipelineEvents & {
+  "sidecar:exit": [{ code: number | null; signal: NodeJS.Signals | null; unexpected: boolean }];
+};
+
 interface ActiveSource {
   sourceId: string;
   spec: SourceSpec;
 }
 
-export class AudioBridge extends TypedEmitter<PipelineEvents> {
+export function sourceKey(spec: SourceSpec): string {
+  if (spec.kind === "mic") return "mic";
+  if (spec.kind === "app") return `app:${spec.bundleId}`;
+  return `browser:${spec.bundleId}`;
+}
+
+export class AudioBridge extends TypedEmitter<BridgeEvents> {
   private sidecar: ChildProcess | null = null;
   private server: Server | null = null;
   private socketPath = "";
   private client: Socket | null = null;
   private sources = new Map<string, ActiveSource>();
+  private sourceByKey = new Map<string, string>();
   private running = false;
   private sidecarBinary: string;
+  private intentionalStop = false;
 
   constructor(sidecarBinary: string) {
     super();
     this.sidecarBinary = sidecarBinary;
   }
 
+  isRunning(): boolean {
+    return this.running;
+  }
+
+  getSourceKeys(): string[] {
+    return [...this.sourceByKey.keys()];
+  }
+
+  getSpecForKey(key: string): SourceSpec | null {
+    const sourceId = this.sourceByKey.get(key);
+    if (!sourceId) return null;
+    return this.sources.get(sourceId)?.spec ?? null;
+  }
+
   async start(): Promise<void> {
     if (this.running) return;
+    this.intentionalStop = false;
     this.socketPath = join(tmpdir(), `notetaker-${randomBytes(8).toString("hex")}.sock`);
     if (existsSync(this.socketPath)) unlink(this.socketPath, () => {});
 
@@ -55,6 +82,7 @@ export class AudioBridge extends TypedEmitter<PipelineEvents> {
 
   async stop(): Promise<void> {
     if (!this.running) return;
+    this.intentionalStop = true;
     this.sendCommand({ cmd: "stop" });
     this.sidecar?.kill("SIGTERM");
     this.sidecar = null;
@@ -64,6 +92,7 @@ export class AudioBridge extends TypedEmitter<PipelineEvents> {
     this.server = null;
     if (existsSync(this.socketPath)) unlink(this.socketPath, () => {});
     this.sources.clear();
+    this.sourceByKey.clear();
     this.running = false;
     log.info("audio bridge stopped");
   }
@@ -83,16 +112,34 @@ export class AudioBridge extends TypedEmitter<PipelineEvents> {
     );
   }
 
+  async removeByKey(key: string): Promise<void> {
+    const sourceId = this.sourceByKey.get(key);
+    if (!sourceId) return;
+    this.sendCommand({ cmd: "remove", sourceId });
+  }
+
   async removeSource(sourceId: string): Promise<void> {
     if (!this.sources.has(sourceId)) return;
     this.sendCommand({ cmd: "remove", sourceId });
   }
 
   private async addSource(sidecarSource: SidecarSource, spec: SourceSpec): Promise<string> {
+    const key = sourceKey(spec);
+    const existing = this.sourceByKey.get(key);
+    if (existing) return existing;
+
     const sourceId = newSourceId(spec.kind);
     this.sources.set(sourceId, { sourceId, spec });
+    this.sourceByKey.set(key, sourceId);
     this.sendCommand({ cmd: "add", source: sidecarSource, sourceId });
     return sourceId;
+  }
+
+  private dropSource(sourceId: string): void {
+    const entry = this.sources.get(sourceId);
+    if (!entry) return;
+    this.sources.delete(sourceId);
+    this.sourceByKey.delete(sourceKey(entry.spec));
   }
 
   private handleSidecarEvent(evt: SidecarEvent): void {
@@ -101,7 +148,8 @@ export class AudioBridge extends TypedEmitter<PipelineEvents> {
         this.emit("audio:source:added", { sourceId: evt.sourceId });
       }
     } else if (evt.type === "source:stopped") {
-      if (this.sources.delete(evt.sourceId)) {
+      if (this.sources.has(evt.sourceId)) {
+        this.dropSource(evt.sourceId);
         this.emit("audio:source:removed", { sourceId: evt.sourceId });
       }
     } else if (evt.type === "error") {
@@ -197,13 +245,16 @@ export class AudioBridge extends TypedEmitter<PipelineEvents> {
       });
 
       this.sidecar.on("exit", (code, signal) => {
-        log.error("sidecar exited unexpectedly", { code, signal });
+        const unexpected = !this.intentionalStop && ready;
+        log.error("sidecar exited", { code, signal, unexpected });
         this.running = false;
         this.sidecar = null;
         if (!ready) {
           clearTimeout(timeout);
           reject(new Error(`Sidecar exited with code ${code}`));
+          return;
         }
+        this.emit("sidecar:exit", { code, signal, unexpected });
       });
     });
   }

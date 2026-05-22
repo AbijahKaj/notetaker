@@ -14,17 +14,21 @@ type Page = "session" | "review" | "settings" | "onboarding" | "search";
 export function App() {
   const [page, setPage] = useState<Page>("session");
   const [listening, setListening] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState(true);
   const [activeSession, setActiveSession] = useState<Session | null>(null);
   const [reviewSession, setReviewSession] = useState<Session | null>(null);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [updateReady, setUpdateReady] = useState<{ version: string } | null>(null);
 
   useEffect(() => {
     void (async () => {
       const { enabled } = await api().invoke("listening:get");
       setListening(enabled);
       const prefs = await api().invoke("preferences:get");
+      setLiveTranscript(prefs.liveTranscript);
       const models = await api().invoke("models:status");
       const requiredMissing = models.some((m) => m.required && !m.installed);
       if (!prefs.onboardingCompleted || requiredMissing) {
@@ -61,6 +65,18 @@ export function App() {
               setPage("review");
             }
           });
+          break;
+        case "error":
+          setErrorBanner(evt.payload.message);
+          break;
+        case "preferences:changed":
+          setLiveTranscript(evt.payload.liveTranscript);
+          break;
+        case "navigate":
+          if (evt.payload.hash === "#/settings") setPage("settings");
+          break;
+        case "update:downloaded":
+          setUpdateReady({ version: evt.payload.version });
           break;
       }
     });
@@ -102,6 +118,31 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {errorBanner && (
+        <div className="error-banner">
+          <span>{errorBanner}</span>
+          <button type="button" className="btn btn-ghost" onClick={() => setErrorBanner(null)}>Dismiss</button>
+        </div>
+      )}
+      {updateReady && (
+        <div className="update-toast" role="status">
+          <span>Version {updateReady.version} is ready to install.</span>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => void api().invoke("update:install")}
+          >
+            Restart &amp; update
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setUpdateReady(null)}
+          >
+            Later
+          </button>
+        </div>
+      )}
       <div className="app-layout">
       <Sidebar
         listening={listening}
@@ -117,6 +158,7 @@ export function App() {
             session={activeSession}
             segments={segments}
             listening={listening}
+            showLiveTranscript={liveTranscript}
             onNotesChange={(notes) => {
               if (activeSession) {
                 void api().invoke("sessions:updateNotes", { id: activeSession.id, notes });

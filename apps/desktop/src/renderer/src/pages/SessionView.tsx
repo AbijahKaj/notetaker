@@ -7,11 +7,12 @@ interface SessionViewProps {
   session: Session | null;
   segments: TranscriptSegment[];
   listening: boolean;
+  showLiveTranscript?: boolean;
   onNotesChange: (notes: string) => void;
   onSessionEnded: () => void;
 }
 
-export function SessionView({ session, segments, listening, onNotesChange, onSessionEnded }: SessionViewProps) {
+export function SessionView({ session, segments, listening, showLiveTranscript = true, onNotesChange, onSessionEnded }: SessionViewProps) {
   const [notes, setNotes] = useState(session?.userNotes ?? "");
   const [notesTimer, setNotesTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [ending, setEnding] = useState(false);
@@ -38,7 +39,7 @@ export function SessionView({ session, segments, listening, onNotesChange, onSes
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <h1 className="page-title" style={{ marginBottom: 0 }}>
-          {session ? "Active Session" : listening ? "Listening" : "Paused"}
+          {session ? "Active Session" : listening ? "Listening" : "Paused (mic on)"}
         </h1>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {session && <span className="badge badge-success">Recording</span>}
@@ -61,9 +62,9 @@ export function SessionView({ session, segments, listening, onNotesChange, onSes
             placeholder={
               session
                 ? "Take rough notes during the meeting…"
-                : listening
+                  : listening
                   ? "Listening — notes save when speech starts a session…"
-                  : "Press Start in the sidebar to begin listening…"
+                  : "Mic is on. Press Start in the sidebar to transcribe…"
             }
             disabled={!session}
             style={{ flex: 1, minHeight: 0 }}
@@ -75,11 +76,17 @@ export function SessionView({ session, segments, listening, onNotesChange, onSes
             Live Transcript
           </h2>
           <div style={{ flex: 1, overflowY: "auto" }}>
-            <TranscriptPanel
-              segments={segments}
-              sessionStartedAt={session?.startedAt}
-              listening={listening}
-            />
+            {showLiveTranscript ? (
+              <TranscriptPanel
+                segments={segments}
+                sessionStartedAt={session?.startedAt}
+                listening={listening}
+              />
+            ) : (
+              <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
+                Live transcript hidden. Transcription still runs while listening is on.
+              </p>
+            )}
           </div>
         </div>
       </div>

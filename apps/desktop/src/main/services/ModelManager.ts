@@ -3,7 +3,7 @@ import { createWriteStream, existsSync, mkdirSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { MODEL_CATALOG, createLogger } from "@notetaker/core";
+import { MODEL_CATALOG, createLogger, verifyFileSha256 } from "@notetaker/core";
 import { resolveModelsDir } from "@notetaker/core/models-dir";
 
 const execFileAsync = promisify(execFile);
@@ -92,6 +92,10 @@ export class ModelManager {
       writeStream.end(() => resolve());
       writeStream.on("error", reject);
     });
+
+    if (spec.downloadSha256) {
+      await verifyFileSha256(tmpPath, spec.downloadSha256);
+    }
 
     try {
       if (spec.archive) {

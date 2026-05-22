@@ -2,17 +2,23 @@ import { useState, useEffect } from "react";
 import type { Preferences, LlmProvider } from "@notetaker/core";
 import { defaultLlmModel, llmModelPlaceholder } from "@notetaker/core/llm-defaults";
 import { api } from "../desktop";
+import { HotkeyInput } from "../components/HotkeyInput";
 
 interface SettingsViewProps {
   onRunSetup?: () => void;
 }
 
+const DEFAULT_TOGGLE_HOTKEY = "CommandOrControl+Shift+L";
+
 export function SettingsView({ onRunSetup }: SettingsViewProps) {
   const [prefs, setPrefs] = useState<Preferences | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [apps, setApps] = useState<{ bundleId: string; name: string; installed: boolean; running: boolean }[]>([]);
   const [newSite, setNewSite] = useState("");
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState<string>("");
 
   useEffect(() => {
     void (async () => {
@@ -20,12 +26,33 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
       setPrefs(p);
       const detected = await api().invoke("apps:detected");
       setApps(detected);
+      const version = await api().invoke("system:appVersion");
+      setAppVersion(version);
     })();
   }, []);
 
+  const checkForUpdates = async () => {
+    setUpdateStatus("Checking…");
+    const result = await api().invoke("update:check");
+    if (!result.ok) {
+      setUpdateStatus(result.error ?? "Update check failed");
+    } else if (result.alreadyLatest) {
+      setUpdateStatus("You're on the latest version.");
+    } else if (result.version) {
+      setUpdateStatus(`Update available: ${result.version}. Downloading in the background…`);
+    } else {
+      setUpdateStatus("Update check finished.");
+    }
+  };
+
   const update = async (patch: Partial<Preferences>) => {
-    const next = await api().invoke("preferences:set", patch);
-    setPrefs(next);
+    try {
+      setSettingsError(null);
+      const next = await api().invoke("preferences:set", patch);
+      setPrefs(next);
+    } catch (err) {
+      setSettingsError(String(err));
+    }
   };
 
   const toggleApp = async (bundleId: string) => {
@@ -67,6 +94,9 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
   return (
     <div style={{ maxWidth: 640 }}>
       <h1 className="page-title">Settings</h1>
+      {settingsError && (
+        <div className="error-banner">{settingsError}</div>
+      )}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Setup</h2>
@@ -161,7 +191,7 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
         )}
       </div>
 
-      <div className="card">
+      <div className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Behavior</h2>
         <label className="settings-toggle">
           <input
@@ -179,15 +209,78 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
           />
           <span>Encrypt local database (key stored in Keychain)</span>
         </label>
-        <label className="settings-toggle" style={{ opacity: 0.5 }} title="Not yet available">
+        <label className="settings-toggle">
           <input
             type="checkbox"
             checked={prefs.launchAtLogin}
-            disabled
-            readOnly
+            onChange={(e) => update({ launchAtLogin: e.target.checked })}
           />
-          <span>Launch at login (coming soon)</span>
+          <span>Launch at login</span>
         </label>
+        <label className="settings-toggle">
+          <input
+            type="checkbox"
+            checked={prefs.persistAudio}
+            onChange={(e) => update({ persistAudio: e.target.checked })}
+          />
+          <span>Save raw audio locally during sessions</span>
+        </label>
+        <button
+          className="btn btn-ghost"
+          style={{ marginTop: 10, fontSize: 12 }}
+          onClick={() =>
+            void api().invoke(
+              "system:openExternal",
+              "https://abijahkaj.github.io/notetaker/security.html",
+            )
+          }
+        >
+          How encryption works
+        </button>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Keyboard shortcut</h2>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+          Toggle listening from anywhere. Click below and press a key combination.
+        </p>
+        <HotkeyInput
+          value={prefs.globalShortcutToggleListening}
+          onChange={(accelerator) => update({ globalShortcutToggleListening: accelerator })}
+          onReset={() => update({ globalShortcutToggleListening: DEFAULT_TOGGLE_HOTKEY })}
+        />
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Updates</h2>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+          {appVersion ? `NoteTaker ${appVersion}` : "NoteTaker"} — updates are checked automatically.
+        </p>
+        <button className="btn btn-ghost" onClick={checkForUpdates}>Check for updates</button>
+        {updateStatus && (
+          <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>{updateStatus}</p>
+        )}
+      </div>
+
+      <div className="card">
+        <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Troubleshooting</h2>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+          Crash logs are stored locally and never uploaded. Attach them when reporting a bug.
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            className="btn btn-ghost"
+            onClick={() => void api().invoke("system:revealCrashLogs")}
+          >
+            Reveal crash logs
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => void api().invoke("system:openGithubIssue")}
+          >
+            Report an issue on GitHub
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>How encryption works — NoteTaker</title>
+    <meta name="description" content="How NoteTaker encrypts your meeting transcripts at rest using SQLCipher and the macOS Keychain." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236c63ff'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23fff'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>NoteTaker</span>
+      </a>
+      <nav class="site-nav">
+        <a href="./#features">Features</a>
+        <a href="./#how">How it works</a>
+        <a href="./#privacy">Privacy</a>
+        <a href="https://github.com/AbijahKaj/notetaker" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+    </header>
+
+    <article class="doc">
+      <a class="doc-back" href="./">← Back</a>
+      <h1>How encryption works</h1>
+      <p class="updated">Last updated: 2026-05-22</p>
+
+      <p>
+        NoteTaker stores meeting transcripts, speaker labels, and notes in a
+        local SQLite database under <code>~/Library/Application Support/NoteTaker</code>.
+        By default, that database is encrypted at rest using SQLCipher.
+      </p>
+
+      <h2>What's encrypted</h2>
+      <ul>
+        <li>All transcript text</li>
+        <li>Speaker IDs and human-given labels</li>
+        <li>Meeting metadata (titles, timestamps, app context)</li>
+        <li>Your private notes</li>
+        <li>Generated summaries</li>
+        <li>The full-text search index</li>
+      </ul>
+
+      <p>
+        Encryption is enabled by default. You can toggle it off in Settings →
+        Behavior if you want a plain SQLite file (for example, to inspect it
+        with another tool), but we recommend leaving it on.
+      </p>
+
+      <h2>What's <em>not</em> encrypted by NoteTaker</h2>
+      <ul>
+        <li>
+          <strong>Raw audio</strong> (if you've enabled "Save raw audio
+          locally" in Settings) is written as plain <code>.f32le</code> files
+          alongside the database. Disable that toggle if you don't want raw
+          audio on disk.
+        </li>
+        <li>
+          <strong>Crash logs</strong> are written by macOS to
+          <code>~/Library/Application Support/NoteTaker/Crashes</code> in
+          standard format. They never leave your Mac.
+        </li>
+        <li>
+          <strong>Application preferences</strong> (whitelists, hotkey, LLM
+          choice) live in an unencrypted JSON file.
+        </li>
+      </ul>
+
+      <h2>The encryption key</h2>
+      <p>
+        On first launch, NoteTaker generates a 256-bit random key and stores
+        it in your macOS Keychain under the service <code>NoteTaker</code>
+        with the account <code>db:encryption</code>. Only your user account
+        on this Mac can read it, and access is mediated by the macOS Keychain.
+      </p>
+
+      <p>
+        The key is never written to disk in plaintext, never transmitted
+        anywhere, and never visible to the maintainers.
+      </p>
+
+      <h2>Cipher</h2>
+      <p>
+        NoteTaker uses <a href="https://www.zetetic.net/sqlcipher/" target="_blank" rel="noreferrer">SQLCipher</a>
+        with the v4 default profile: AES-256 in CBC mode, HMAC-SHA512 for
+        page-level integrity, and PBKDF2-SHA512 with 256,000 iterations for
+        key derivation.
+      </p>
+
+      <h2>If you lose the key</h2>
+      <p>
+        Because the key never leaves your Keychain, <strong>nobody can recover
+        your transcripts if your Keychain is wiped or your Mac dies without a
+        backup</strong>. This is the price of "we can't see your data" — we
+        also can't reset your password for you.
+      </p>
+      <p>
+        Recommendations:
+      </p>
+      <ul>
+        <li>Use macOS's built-in iCloud Keychain sync if you want the key to follow you across machines.</li>
+        <li>Time Machine backups capture both the encrypted database and the Keychain — keep them.</li>
+        <li>Export important sessions to Markdown periodically for offline backups you can read without NoteTaker.</li>
+      </ul>
+
+      <h2>Reporting a vulnerability</h2>
+      <p>
+        Please use GitHub's
+        <a href="https://github.com/AbijahKaj/notetaker/security/advisories/new" target="_blank" rel="noreferrer">private security advisories</a>
+        rather than a public issue. We aim to respond within a few days.
+      </p>
+    </article>
+
+    <footer class="site-footer">
+      <div class="footer-row">
+        <span>© <span id="year"></span> NoteTaker — Apache 2.0</span>
+        <nav>
+          <a href="./privacy.html">Privacy</a>
+          <a href="./security.html">Security</a>
+          <a href="https://github.com/AbijahKaj/notetaker">GitHub</a>
+        </nav>
+      </div>
+    </footer>
+    <script>document.getElementById("year").textContent = new Date().getFullYear();</script>
+  </body>
+</html>

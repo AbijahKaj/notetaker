@@ -90,10 +90,10 @@ export const PreferencesSchema = z.object({
   liveTranscript: z.boolean().default(true),
   persistAudio: z.boolean().default(false),
   encryptDb: z.boolean().default(true),
-  autoSessionFromCalendar: z.boolean().default(false),
   idleAutoCloseMs: z.number().int().positive().default(5 * 60 * 1000),
   onboardingCompleted: z.boolean().default(false),
   automationGranted: z.boolean().default(false),
+  globalShortcutToggleListening: z.string().default("CommandOrControl+Shift+L"),
 });
 
 export type Preferences = z.infer<typeof PreferencesSchema>;

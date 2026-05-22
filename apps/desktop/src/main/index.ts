@@ -1,13 +1,26 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences } from "electron";
+import {
+  app,
+  BrowserWindow,
+  Tray,
+  Menu,
+  nativeImage,
+  ipcMain,
+  shell,
+  systemPreferences,
+  crashReporter,
+  globalShortcut,
+} from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
+import { release } from "node:os";
 import { createLogger, type Preferences, type Session } from "@notetaker/core";
 import type { IpcEvent, IpcInvokeMap } from "@notetaker/core";
 import { ExportService } from "@notetaker/storage";
 import { PreferencesService } from "./services/PreferencesService.js";
 import { StorageService } from "./services/StorageService.js";
 import { AudioIngestService } from "./services/AudioIngestService.js";
+import { AudioPersistenceService } from "./services/AudioPersistenceService.js";
 import { SpeechService } from "./services/SpeechService.js";
 import { SessionsService } from "./services/SessionsService.js";
 import { SummarizationService } from "./services/SummarizationService.js";
@@ -15,9 +28,21 @@ import { ModelManager } from "./services/ModelManager.js";
 import { LlmKeyService } from "./services/LlmKeyService.js";
 import { AppWatcherService } from "./services/AppWatcherService.js";
 import { PermissionsService } from "./services/PermissionsService.js";
+import { applyLaunchAtLogin } from "./services/LaunchAtLoginService.js";
+import { AutoUpdateService } from "./services/AutoUpdateService.js";
+
+crashReporter.start({
+  productName: "NoteTaker",
+  companyName: "NoteTaker",
+  uploadToServer: false,
+  ignoreSystemCrashHandler: false,
+});
 
 const log = createLogger("main");
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const GITHUB_REPO = "AbijahKaj/notetaker";
+
+let currentToggleShortcut: string | null = null;
 
 let tray: Tray | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -31,6 +56,7 @@ class Application {
   prefs!: PreferencesService;
   storage!: StorageService;
   audio!: AudioIngestService;
+  audioPersist!: AudioPersistenceService;
   speech!: SpeechService;
   sessions!: SessionsService;
   summarizer!: SummarizationService;
@@ -38,6 +64,7 @@ class Application {
   llmKeys!: LlmKeyService;
   appWatcher!: AppWatcherService;
   permissions!: PermissionsService;
+  autoUpdate!: AutoUpdateService;
 
   async init(): Promise<void> {
     const userDataDir = app.getPath("userData");
@@ -51,6 +78,8 @@ class Application {
     await this.storage.init();
 
     this.audio = new AudioIngestService();
+    this.audioPersist = new AudioPersistenceService(userDataDir);
+    this.audioPersist.setEnabled(this.prefs.get().persistAudio);
     this.speech = new SpeechService(this.models);
     this.sessions = new SessionsService(this.storage, this.prefs, this.speech);
     this.summarizer = new SummarizationService(this.llmKeys, this.prefs, this.models);
@@ -58,11 +87,37 @@ class Application {
     this.appWatcher = new AppWatcherService(this.prefs);
     this.permissions = new PermissionsService();
 
+    this.autoUpdate = new AutoUpdateService();
+    this.autoUpdate.on("update:available", (payload) =>
+      sendEvent({ type: "update:available", payload }),
+    );
+    this.autoUpdate.on("update:progress", (payload) =>
+      sendEvent({ type: "update:progress", payload }),
+    );
+    this.autoUpdate.on("update:downloaded", (payload) =>
+      sendEvent({ type: "update:downloaded", payload }),
+    );
+    this.autoUpdate.on("update:error", (payload) =>
+      sendEvent({ type: "update:error", payload }),
+    );
+
     this.wirePipeline();
     this.wireIpc();
 
+    applyLaunchAtLogin(this.prefs.get().launchAtLogin);
+    registerToggleShortcut(this.prefs.get().globalShortcutToggleListening, () => {
+      void application.toggleListening();
+    });
+    this.autoUpdate.start();
+
+    if (this.prefs.get().onboardingCompleted) {
+      await this.ensureAlwaysOnMic();
+    }
+
     if (this.prefs.get().listeningEnabled) {
       await this.enableListening();
+    } else {
+      refreshTrayMenu(false);
     }
   }
 
@@ -74,15 +129,24 @@ class Application {
         const rms = Math.sqrt(sum / frame.pcm.length);
         sendEvent({ type: "audio:level", payload: { sourceId: frame.sourceId, rms } });
       }
-      if (this.prefs.get().listeningEnabled && this.prefs.get().liveTranscript) {
+
+      if (this.prefs.get().persistAudio && this.prefs.get().listeningEnabled) {
+        this.audioPersist.writeFrame(frame);
+      }
+
+      if (this.prefs.get().listeningEnabled) {
         this.speech.feed(frame);
       }
     });
-    this.audio.on("audio:source:added", ({ sourceId }) => {
-      log.info("audio capture started", { sourceId });
-    });
-    this.audio.on("audio:source:removed", ({ sourceId }) => {
-      log.info("audio capture stopped", { sourceId });
+
+    this.audio.on("sidecar:crashed", () => {
+      sendEvent({
+        type: "error",
+        payload: {
+          where: "audio-sidecar",
+          message: "Audio sidecar restarted after an unexpected exit.",
+        },
+      });
     });
 
     this.speech.on("transcript:segment", async (seg) => {
@@ -94,11 +158,13 @@ class Application {
 
     this.sessions.on("session:opened", (sess) => {
       this.speech.setSessionId(sess.id);
+      this.audioPersist.setSessionId(sess.id);
       refreshTrayMenu(this.prefs.get().listeningEnabled);
       sendEvent({ type: "session:opened", payload: sess });
     });
 
     this.sessions.on("session:closed", async (sess) => {
+      this.audioPersist.setSessionId(null);
       refreshTrayMenu(this.prefs.get().listeningEnabled);
       sendEvent({ type: "session:closed", payload: sess });
       try {
@@ -112,6 +178,7 @@ class Application {
     });
 
     this.appWatcher.on("activate", async (bundleId, name) => {
+      if (!this.prefs.get().listeningEnabled) return;
       await this.audio.addAppSource({ bundleId });
       log.info("watched app running", { bundleId, name });
     });
@@ -119,6 +186,7 @@ class Application {
       await this.audio.removeAppSource({ bundleId });
     });
     this.appWatcher.on("browserActivate", async (bundleId, matchedSite, name) => {
+      if (!this.prefs.get().listeningEnabled) return;
       await this.audio.addBrowserSource({ bundleId, matchedSite });
       log.info("browser meeting tab active", { bundleId, matchedSite, name });
     });
@@ -127,45 +195,63 @@ class Application {
     });
   }
 
-  private async enableListening(): Promise<void> {
-    if (process.platform === "darwin") {
-      const micStatus = systemPreferences.getMediaAccessStatus("microphone");
-      if (micStatus !== "granted") {
-        const granted = await systemPreferences.askForMediaAccess("microphone");
-        if (!granted) {
-          log.warn("microphone permission not granted");
-          sendEvent({
-            type: "error",
-            payload: {
-              where: "microphone",
-              message: "Microphone access is required. Enable it in System Settings → Privacy & Security → Microphone.",
-            },
-          });
-        }
-      }
+  private async requestMicPermission(): Promise<boolean> {
+    if (process.platform !== "darwin") return true;
+
+    const micStatus = systemPreferences.getMediaAccessStatus("microphone");
+    if (micStatus === "granted") return true;
+
+    const granted = await systemPreferences.askForMediaAccess("microphone");
+    if (!granted) {
+      sendEvent({
+        type: "error",
+        payload: {
+          where: "microphone",
+          message: "Microphone access is required. Enable it in System Settings → Privacy & Security → Microphone.",
+        },
+      });
     }
+    return granted;
+  }
+
+  async ensureAlwaysOnMic(): Promise<void> {
+    const granted = await this.requestMicPermission();
+    if (!granted) return;
+    await this.audio.ensureMicCapture();
+  }
+
+  private startWatchers(): void {
+    if (this.prefs.get().automationGranted) {
+      this.appWatcher.start();
+    }
+  }
+
+  private stopWatchers(): void {
+    this.appWatcher.stop();
+  }
+
+  private async enableListening(): Promise<void> {
+    await this.ensureAlwaysOnMic();
 
     const listenStartedAt = Date.now();
     this.audio.setListeningActive(true);
     this.sessions.beginListeningSession(listenStartedAt);
 
-    await this.audio.start();
     await this.speech.start();
     this.speech.setTimelineOrigin(listenStartedAt);
-    await this.audio.addMicSource();
-    if (this.prefs.get().automationGranted) {
-      this.appWatcher.start();
-    }
+    this.startWatchers();
+
     refreshTrayMenu(true);
     sendEvent({ type: "listening:changed", payload: { enabled: true } });
   }
 
   private async disableListening(): Promise<void> {
-    this.appWatcher.stop();
+    this.stopWatchers();
+    await this.audio.removeAllMeetingSources();
     this.audio.setListeningActive(false);
-    await this.audio.stop();
     await this.speech.stop();
     await this.sessions.closeActive();
+    this.audioPersist.setSessionId(null);
     refreshTrayMenu(false);
     sendEvent({ type: "listening:changed", payload: { enabled: false } });
   }
@@ -187,7 +273,7 @@ class Application {
     handle<"preferences:set">("preferences:set", async (patch) => {
       const prev = this.prefs.get();
       const next = await this.prefs.update(patch);
-      this.appWatcher.refreshWhitelist();
+
       if (patch.encryptDb !== undefined && patch.encryptDb !== prev.encryptDb) {
         try {
           await this.storage.reconfigureEncryption();
@@ -196,9 +282,37 @@ class Application {
           throw new Error(`Database encryption change failed: ${String(err)}`);
         }
       }
+
+      if (patch.launchAtLogin !== undefined && patch.launchAtLogin !== prev.launchAtLogin) {
+        applyLaunchAtLogin(patch.launchAtLogin);
+      }
+
+      if (patch.persistAudio !== undefined) {
+        this.audioPersist.setEnabled(patch.persistAudio);
+      }
+
       if (patch.automationGranted && this.prefs.get().listeningEnabled) {
         this.appWatcher.start();
       }
+
+      if (patch.onboardingCompleted && !prev.onboardingCompleted) {
+        await this.ensureAlwaysOnMic();
+      }
+
+      if (patch.appWhitelist || patch.siteWhitelist) {
+        this.appWatcher.refreshWhitelist();
+      }
+
+      if (
+        patch.globalShortcutToggleListening !== undefined &&
+        patch.globalShortcutToggleListening !== prev.globalShortcutToggleListening
+      ) {
+        registerToggleShortcut(next.globalShortcutToggleListening, () => {
+          void application.toggleListening();
+        });
+      }
+
+      sendEvent({ type: "preferences:changed", payload: next });
       return next;
     });
 
@@ -296,11 +410,46 @@ class Application {
     handle<"system:quit">("system:quit", () => {
       quitApp();
     });
+    handle<"system:revealCrashLogs">("system:revealCrashLogs", () => {
+      const dir = app.getPath("crashDumps");
+      void shell.openPath(dir);
+    });
+    handle<"system:openGithubIssue">("system:openGithubIssue", () => {
+      const body = [
+        "<!-- Thanks for reporting a bug! Please fill in below. -->",
+        "",
+        "**Version:** " + app.getVersion(),
+        "**OS:** macOS " + release(),
+        "",
+        "## What happened",
+        "",
+        "## Steps to reproduce",
+        "1. ",
+        "2. ",
+        "",
+        "## Crash logs",
+        "If the app crashed, click \"Reveal crash logs\" in Settings and attach the most recent file here.",
+        "",
+      ].join("\n");
+      const url =
+        "https://github.com/" +
+        GITHUB_REPO +
+        "/issues/new?labels=bug&title=" +
+        encodeURIComponent("[bug] ") +
+        "&body=" +
+        encodeURIComponent(body);
+      void shell.openExternal(url);
+    });
+    handle<"system:appVersion">("system:appVersion", () => app.getVersion());
     handle<"window:show">("window:show", () => {
       showMainWindow();
     });
     handle<"window:setKeepVisible">("window:setKeepVisible", (keep) => {
       setKeepWindowVisible(keep);
+    });
+    handle<"update:check">("update:check", () => this.autoUpdate.check());
+    handle<"update:install">("update:install", () => {
+      this.autoUpdate.install();
     });
   }
 }
@@ -327,6 +476,33 @@ function sendEvent(evt: IpcEvent): void {
   }
 }
 
+function registerToggleShortcut(accelerator: string, handler: () => void): void {
+  if (currentToggleShortcut) {
+    try {
+      globalShortcut.unregister(currentToggleShortcut);
+    } catch (err) {
+      log.warn("globalShortcut.unregister failed", { err: String(err) });
+    }
+    currentToggleShortcut = null;
+  }
+  if (!accelerator) return;
+  if (!app.isReady()) {
+    app.whenReady().then(() => registerToggleShortcut(accelerator, handler));
+    return;
+  }
+  try {
+    const ok = globalShortcut.register(accelerator, handler);
+    if (ok) {
+      currentToggleShortcut = accelerator;
+      log.info("global shortcut registered", { accelerator });
+    } else {
+      log.warn("global shortcut already taken by another app", { accelerator });
+    }
+  } catch (err) {
+    log.warn("globalShortcut.register failed", { accelerator, err: String(err) });
+  }
+}
+
 function refreshTrayMenu(listening: boolean): void {
   if (!tray) return;
   const hasActive = !!application.sessions.getActiveSessionId();
@@ -342,16 +518,17 @@ function refreshTrayMenu(listening: boolean): void {
     { label: "Quit", click: () => quitApp() },
   ]);
   tray.setContextMenu(menu);
-  tray.setToolTip(listening ? "NoteTaker — listening" : "NoteTaker — paused");
+  tray.setToolTip(listening ? "NoteTaker — listening" : "NoteTaker — paused (mic always on)");
   const dot = listening ? "●" : "○";
   tray.setTitle(dot);
 }
 
 function createTray(): void {
-  const image = nativeImage.createEmpty();
+  const iconPath = join(__dirname, "../../resources/icon.png");
+  const image = existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
   tray = new Tray(image);
   tray.setTitle("○");
-  refreshTrayMenu(false);
+  refreshTrayMenu(application.prefs?.get().listeningEnabled ?? false);
 }
 
 function quitApp(): void {
@@ -385,7 +562,7 @@ function showMainWindow(hash?: string): void {
     createMainWindow();
   }
   if (hash) {
-    mainWindow?.webContents.send("event", { type: "navigate", payload: { hash } } as unknown as IpcEvent);
+    mainWindow?.webContents.send("event", { type: "navigate", payload: { hash } });
   }
   mainWindow?.show();
   mainWindow?.focus();
@@ -473,7 +650,14 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   isQuitting = true;
   setKeepWindowVisible(false);
+  try {
+    globalShortcut.unregisterAll();
+  } catch (err) {
+    log.warn("globalShortcut.unregisterAll failed", { err: String(err) });
+  }
+  application.autoUpdate?.stop();
   void application.sessions?.closeActive().catch(() => {});
+  void application.audio?.shutdown().catch(() => {});
 });
 
 export type { Preferences };

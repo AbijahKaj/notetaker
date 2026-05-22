@@ -24,9 +24,11 @@ module.exports = {
   ],
   mac: {
     category: "public.app-category.productivity",
+    icon: "resources/icon.png",
     target: ["dmg", "zip"],
     hardenedRuntime: true,
     gatekeeperAssess: false,
+    notarize: process.env.APPLE_TEAM_ID ? { teamId: process.env.APPLE_TEAM_ID } : false,
     entitlements: "resources/entitlements.mac.plist",
     entitlementsInherit: "resources/entitlements.mac.plist",
     extendInfo: {
@@ -55,5 +57,13 @@ module.exports = {
     oneClick: false,
     allowToChangeInstallationDirectory: true,
   },
-  publish: null,
+  asarUnpack: [
+    "**/*.node",
+  ],
+  npmRebuild: true,
+  publish: {
+    provider: "github",
+    owner: "AbijahKaj",
+    repo: "notetaker",
+  },
 };

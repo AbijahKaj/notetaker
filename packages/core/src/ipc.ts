@@ -24,7 +24,13 @@ export type IpcEvent =
     }
   | { type: "permission:changed"; payload: { kind: "microphone" | "systemAudio"; granted: boolean } }
   | { type: "summary:ready"; payload: { sessionId: string; summary: MeetingSummary } }
-  | { type: "error"; payload: { where: string; message: string } };
+  | { type: "error"; payload: { where: string; message: string } }
+  | { type: "preferences:changed"; payload: Preferences }
+  | { type: "navigate"; payload: { hash: string } }
+  | { type: "update:available"; payload: { version: string; releaseNotes?: string } }
+  | { type: "update:progress"; payload: { percent: number; bytesPerSecond: number } }
+  | { type: "update:downloaded"; payload: { version: string } }
+  | { type: "update:error"; payload: { message: string } };
 
 export type PermissionState = "granted" | "denied" | "not-determined" | "restricted";
 
@@ -57,8 +63,13 @@ export interface IpcInvokeMap {
   "export:srt": (sessionId: string) => string;
   "system:openExternal": (url: string) => void;
   "system:quit": () => void;
+  "system:revealCrashLogs": () => void;
+  "system:openGithubIssue": () => void;
+  "system:appVersion": () => string;
   "window:show": () => void;
   "window:setKeepVisible": (keep: boolean) => void;
+  "update:check": () => { ok: boolean; version?: string; alreadyLatest?: boolean; error?: string };
+  "update:install": () => void;
 }
 
 export type IpcChannel = keyof IpcInvokeMap;

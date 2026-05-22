@@ -39,6 +39,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const [llmModel, setLlmModel] = useState(defaultLlmModel("anthropic"));
   const [apiKey, setApiKey] = useState("");
   const [testDone, setTestDone] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const isMac = typeof navigator !== "undefined" && navigator.platform.toLowerCase().includes("mac");
@@ -214,12 +215,32 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   };
 
   const runTest = async () => {
-    const { enabled } = await api().invoke("listening:toggle");
-    if (enabled) {
-      setTimeout(async () => {
-        await api().invoke("sessions:endActive");
-        setTestDone(true);
-      }, 5000);
+    setTestError(null);
+    let sawTranscript = false;
+    const unsub = api().on((evt) => {
+      if (evt.type === "transcript:segment" && evt.payload.text.trim().length > 2) {
+        sawTranscript = true;
+      }
+    });
+
+    const before = await api().invoke("listening:get");
+    if (!before.enabled) {
+      await api().invoke("listening:toggle");
+    }
+
+    await new Promise((r) => setTimeout(r, 8000));
+    await api().invoke("sessions:endActive");
+
+    if (!before.enabled) {
+      await api().invoke("listening:toggle");
+    }
+
+    unsub();
+
+    if (sawTranscript) {
+      setTestDone(true);
+    } else {
+      setTestError("No transcript detected. Check microphone permission and speak clearly during the test.");
     }
   };
 
@@ -302,8 +323,8 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
           <>
             <h1 style={{ fontSize: 24, fontWeight: 700 }}>Welcome to NoteTaker</h1>
             <p style={{ color: "var(--text-muted)" }}>
-              A privacy-first meeting note taker. Speech recognition runs locally on your device.
-              Audio never leaves your machine unless you opt in to a cloud LLM for summaries.
+              A privacy-first meeting note taker. Your microphone stays on; speech recognition runs locally.
+              System audio is captured only from whitelisted meeting apps and browser tabs.
             </p>
             <div className="onboarding-actions">
               <button className="btn btn-primary" onClick={next}>Get started</button>
@@ -425,6 +446,21 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             {downloadError && (
               <div className="card" style={{ marginBottom: 12, borderColor: "var(--danger, #e55)" }}>
                 <p style={{ margin: 0, fontSize: 13, color: "var(--danger, #e55)" }}>{downloadError}</p>
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button
+                    className="btn btn-primary"
+                    onClick={downloadRequiredModels}
+                    disabled={downloading}
+                  >
+                    Retry download
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => setDownloadError(null)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
             )}
 
@@ -546,7 +582,12 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
                 <p style={{ marginTop: 8, fontSize: 13 }}>Transcription pipeline is working.</p>
               </div>
             ) : (
-              <button className="btn btn-primary" onClick={runTest}>Start 5-second test</button>
+              <>
+                <button className="btn btn-primary" onClick={runTest}>Start 8-second test</button>
+                {testError && (
+                  <p style={{ marginTop: 12, fontSize: 13, color: "var(--danger)" }}>{testError}</p>
+                )}
+              </>
             )}
             <div className="onboarding-actions">
               <button className="btn btn-ghost" onClick={() => { setTestDone(true); next(); }}>Skip</button>

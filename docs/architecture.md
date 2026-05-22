@@ -7,7 +7,7 @@ NoteTaker is a macOS menu-bar Electron app with a Swift CoreAudio sidecar for pe
 ## Data flow
 
 ```
-Mic + meeting app/browser taps (Swift sidecar)
+Mic (always) + meeting app/browser taps (when listening)
   → Unix socket PCM frames
   → AudioBridge (TypeScript)
   → Silero VAD
@@ -19,19 +19,21 @@ Mic + meeting app/browser taps (Swift sidecar)
 
 ## Capture policy
 
-| Source | Active when | Gate |
+| Source | Capture active | Transcribed when |
 |---|---|---|
-| Microphone | Listening toggle ON | VAD |
-| Whitelisted meeting apps | App running | VAD |
-| Browsers | Whitelisted site in tab (AppleScript poll) | VAD |
+| Microphone | Always (after permission) | Listening toggle ON |
+| Whitelisted meeting apps | App running + listening ON | Listening toggle ON |
+| Browsers | Whitelisted site in tab + listening ON | Listening toggle ON |
+
+The listening toggle controls transcription, session lifecycle, and whitelisted system-audio taps. Pausing listening does not stop the microphone.
 
 ## Packages
 
 - `@notetaker/core` — shared types, events, IPC contracts, constants
-- `@notetaker/audio-bridge` — Swift sidecar lifecycle, PCM streaming, ring buffer
+- `@notetaker/audio-bridge` — Swift sidecar lifecycle, PCM streaming, source registry
 - `@notetaker/speech` — sherpa-onnx wrapper (VAD, STT, lang-ID, diarization)
 - `@notetaker/llm` — summarizer adapters
-- `@notetaker/storage` — SQLite schema, FTS5, export
+- `@notetaker/storage` — SQLite schema, FTS5, SQLCipher encryption, export
 
 ## Native components
 
@@ -53,5 +55,5 @@ Expected gains: ~110x realtime on M4 Pro Neural Engine vs ~32x on ONNX CPU, with
 
 - API keys stored in macOS Keychain via `keytar`
 - SQLite database encrypted at rest with SQLCipher (key in Keychain when `encryptDb` enabled)
-- No raw audio persisted by default
+- No raw audio persisted unless `persistAudio` is enabled
 - Logger redacts API keys and tokens

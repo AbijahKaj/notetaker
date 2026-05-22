@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy — NoteTaker</title>
+    <meta name="description" content="NoteTaker privacy policy. We can't see your data because we don't have a server." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236c63ff'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23fff'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>NoteTaker</span>
+      </a>
+      <nav class="site-nav">
+        <a href="./#features">Features</a>
+        <a href="./#how">How it works</a>
+        <a href="./#privacy">Privacy</a>
+        <a href="https://github.com/AbijahKaj/notetaker" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+    </header>
+
+    <article class="doc">
+      <a class="doc-back" href="./">← Back</a>
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last updated: 2026-05-22</p>
+
+      <p>
+        NoteTaker is a desktop application that runs entirely on your Mac.
+        There is no NoteTaker backend. There is no NoteTaker account. We — the
+        maintainers — cannot see your meetings, your transcripts, your notes,
+        or your usage of the app, because none of it is ever sent to us.
+      </p>
+
+      <h2>What NoteTaker captures</h2>
+      <ul>
+        <li>
+          <strong>Microphone audio</strong> — Once you grant permission during
+          onboarding, the microphone stays active so that transcription can
+          start instantly when you turn listening on. The audio is fed directly
+          into the on-device speech recognizer.
+        </li>
+        <li>
+          <strong>System audio</strong> — When listening is on AND a whitelisted
+          meeting app (Zoom, Teams, Slack, etc.) is running, or a whitelisted
+          site (meet.google.com, etc.) is the active browser tab, NoteTaker
+          captures that app's audio via the macOS CoreAudio process tap.
+          System audio is never captured at other times.
+        </li>
+        <li>
+          <strong>Browser tab URLs</strong> — Only the URL of the active tab is
+          read, and only to detect whether a whitelisted meeting site is open.
+          Page contents are never accessed.
+        </li>
+      </ul>
+
+      <h2>What stays on your Mac</h2>
+      <ul>
+        <li>All audio captured by NoteTaker</li>
+        <li>All transcripts, speaker labels, and notes</li>
+        <li>The encryption key for your local database (stored in the macOS Keychain)</li>
+        <li>API keys you've added (stored in the macOS Keychain)</li>
+        <li>Crash logs (written locally; never uploaded)</li>
+        <li>Application preferences and meeting/site whitelists</li>
+      </ul>
+
+      <h2>What leaves your Mac (only if you opt in)</h2>
+      <ul>
+        <li>
+          <strong>Transcript text</strong> sent to the cloud LLM provider you
+          select (Anthropic, OpenAI, or OpenRouter) to generate meeting
+          summaries. Your API key authenticates these requests directly with
+          that provider; NoteTaker is not in the middle.
+        </li>
+        <li>
+          Nothing else. Choose the local MLX provider if you don't want
+          anything to leave your Mac.
+        </li>
+      </ul>
+
+      <h2>Telemetry and analytics</h2>
+      <p>
+        NoteTaker does not collect telemetry, analytics, error reports, usage
+        data, or anonymous identifiers. There is no analytics SDK, no
+        error-reporting service, and no remote logging.
+      </p>
+
+      <h2>Updates</h2>
+      <p>
+        NoteTaker checks GitHub Releases for new versions on startup and every
+        six hours. These requests go to <code>api.github.com</code> and only
+        share what any HTTP request normally does (your IP, user agent, the
+        repo being queried). GitHub's privacy policy applies to those
+        requests.
+      </p>
+
+      <h2>Third-party services you may choose to use</h2>
+      <p>
+        If you configure a cloud LLM, your transcript text is sent to that
+        provider's API per their privacy policy:
+      </p>
+      <ul>
+        <li><a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noreferrer">Anthropic</a></li>
+        <li><a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noreferrer">OpenAI</a></li>
+        <li><a href="https://openrouter.ai/privacy" target="_blank" rel="noreferrer">OpenRouter</a></li>
+      </ul>
+
+      <h2>Your control</h2>
+      <ul>
+        <li>Disable listening at any time from the menu bar or hotkey.</li>
+        <li>Remove apps and sites from the whitelists in Settings.</li>
+        <li>Delete sessions individually or wipe the local database from your file system (<code>~/Library/Application Support/NoteTaker</code>).</li>
+        <li>Revoke microphone or system-audio permission in macOS System Settings.</li>
+      </ul>
+
+      <h2>Contact</h2>
+      <p>
+        Questions or concerns? Open an issue on
+        <a href="https://github.com/AbijahKaj/notetaker/issues" target="_blank" rel="noreferrer">GitHub</a>,
+        or report a security issue through GitHub's
+        <a href="https://github.com/AbijahKaj/notetaker/security/advisories/new" target="_blank" rel="noreferrer">private advisories</a>.
+      </p>
+    </article>
+
+    <footer class="site-footer">
+      <div class="footer-row">
+        <span>© <span id="year"></span> NoteTaker — Apache 2.0</span>
+        <nav>
+          <a href="./privacy.html">Privacy</a>
+          <a href="./security.html">Security</a>
+          <a href="https://github.com/AbijahKaj/notetaker">GitHub</a>
+        </nav>
+      </div>
+    </footer>
+    <script>document.getElementById("year").textContent = new Date().getFullYear();</script>
+  </body>
+</html>
