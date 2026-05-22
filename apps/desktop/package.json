@@ -16,11 +16,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
-    "@notetaker/audio-bridge": "workspace:*",
-    "@notetaker/core": "workspace:*",
-    "@notetaker/llm": "workspace:*",
-    "@notetaker/speech": "workspace:*",
-    "@notetaker/storage": "workspace:*",
+    "better-sqlite3-multiple-ciphers": "^11.10.0",
     "electron-store": "^10.0.0",
     "electron-updater": "^6.3.9",
     "keytar": "^7.9.0",
@@ -28,6 +24,11 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@notetaker/audio-bridge": "workspace:*",
+    "@notetaker/core": "workspace:*",
+    "@notetaker/llm": "workspace:*",
+    "@notetaker/speech": "workspace:*",
+    "@notetaker/storage": "workspace:*",
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

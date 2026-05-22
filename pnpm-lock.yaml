@@ -20,21 +20,9 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@notetaker/audio-bridge':
-        specifier: workspace:*
-        version: link:../../packages/audio-bridge
-      '@notetaker/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@notetaker/llm':
-        specifier: workspace:*
-        version: link:../../packages/llm
-      '@notetaker/speech':
-        specifier: workspace:*
-        version: link:../../packages/speech
-      '@notetaker/storage':
-        specifier: workspace:*
-        version: link:../../packages/storage
+      better-sqlite3-multiple-ciphers:
+        specifier: ^11.10.0
+        version: 11.10.0
       electron-store:
         specifier: ^10.0.0
         version: 10.1.0
@@ -51,6 +39,21 @@ importers:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
     devDependencies:
+      '@notetaker/audio-bridge':
+        specifier: workspace:*
+        version: link:../../packages/audio-bridge
+      '@notetaker/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@notetaker/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
+      '@notetaker/speech':
+        specifier: workspace:*
+        version: link:../../packages/speech
+      '@notetaker/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@types/node':
         specifier: ^22.9.0
         version: 22.19.19

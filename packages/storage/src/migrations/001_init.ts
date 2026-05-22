@@ -1,3 +1,5 @@
+/** Initial schema — keep as a TS module so electron-vite can bundle storage without filesystem paths. */
+export const INIT_MIGRATION_SQL = `
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   started_at INTEGER NOT NULL,
@@ -42,3 +44,4 @@ CREATE TRIGGER IF NOT EXISTS segments_au AFTER UPDATE ON segments BEGIN
   INSERT INTO segments_fts(segments_fts, rowid, text) VALUES('delete', old.rowid, old.text);
   INSERT INTO segments_fts(rowid, text) VALUES (new.rowid, new.text);
 END;
+`.trim();

@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { SqliteDatabase } from "./openDatabase.js";
 import { openDatabase } from "./openDatabase.js";
 import type {
@@ -10,8 +7,7 @@ import type {
   TranscriptSegment,
 } from "@notetaker/core";
 import { newSessionId } from "@notetaker/core";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { INIT_MIGRATION_SQL } from "./migrations/001_init.js";
 
 export interface DatabaseOptions {
   dbPath: string;
@@ -27,8 +23,7 @@ export class NoteTakerDatabase {
   }
 
   private migrate(): void {
-    const sql = readFileSync(join(__dirname, "../migrations/001_init.sql"), "utf8");
-    this.db.exec(sql);
+    this.db.exec(INIT_MIGRATION_SQL);
   }
 
   createSession(meta: Partial<SessionMeta> = {}): Session {

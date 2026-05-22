@@ -19,13 +19,10 @@ module.exports = {
   },
   files: [
     "out/**/*",
-    // TypeScript dev artifacts shipped by our workspace packages — not
-    // needed at runtime and the .d.ts.map files trip electron-builder's
-    // realpath check under pnpm's symlinked node_modules.
+    // @notetaker/* are devDependencies (bundled into out/ by electron-vite).
+    // Native modules (better-sqlite3, keytar) stay in dependencies.
     "!**/*.d.ts",
     "!**/*.d.ts.map",
-    "!**/*.ts",
-    "!**/*.tsx",
     "!**/*.map",
     "!**/tsconfig*.json",
     "!**/*.tsbuildinfo",
