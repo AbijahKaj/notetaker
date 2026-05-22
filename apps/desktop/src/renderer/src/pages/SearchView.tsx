@@ -30,14 +30,14 @@ export function SearchView({ onOpenSession }: SearchViewProps) {
         <button className="btn btn-primary" onClick={search}>Search</button>
       </div>
 
-      {results.map((s, i) => (
+      {results.map((s) => (
         <button
           key={s.id}
           className="session-card"
           style={{ width: "100%", textAlign: "left" }}
           onClick={() => onOpenSession(s.id)}
         >
-          <div className="session-card-title">{formatSessionListTitle(s, i)}</div>
+          <div className="session-card-title">{formatSessionListTitle(s)}</div>
           <div className="session-card-meta">
             {formatSessionDateTime(s.startedAt)}
             {s.appContext ? ` · ${s.appContext}` : ""}

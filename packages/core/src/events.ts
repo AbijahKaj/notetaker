@@ -9,6 +9,7 @@ export type PipelineEvents = {
   "transcript:segment": [TranscriptSegment];
   "session:opened": [Session];
   "session:closed": [Session];
+  "session:discarded": [{ id: string }];
   "session:idle": [{ sessionId: string }];
   "error": [{ where: string; error: unknown }];
 };

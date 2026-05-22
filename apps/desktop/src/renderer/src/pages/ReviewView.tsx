@@ -7,11 +7,13 @@ interface ReviewViewProps {
   session: Session;
   onBack: () => void;
   onRenameSpeaker: (speakerId: string, label: string) => void;
+  onDelete: () => void;
 }
 
-export function ReviewView({ session, onBack, onRenameSpeaker }: ReviewViewProps) {
+export function ReviewView({ session, onBack, onRenameSpeaker, onDelete }: ReviewViewProps) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const speakers = [...new Set(session.segments.map((s) => s.speakerId))];
 
@@ -44,9 +46,23 @@ export function ReviewView({ session, onBack, onRenameSpeaker }: ReviewViewProps
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
         <button className="btn btn-ghost" onClick={onBack}>← Back</button>
-        <h1 className="page-title" style={{ marginBottom: 0 }}>
+        <h1 className="page-title" style={{ marginBottom: 0, flex: 1 }}>
           {session.summary?.title ?? session.title ?? "Meeting Review"}
         </h1>
+        {confirmDelete ? (
+          <>
+            <button className="btn btn-danger" onClick={onDelete}>
+              Confirm delete
+            </button>
+            <button className="btn btn-ghost" onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button className="btn btn-ghost" onClick={() => setConfirmDelete(true)} title="Delete this session">
+            Delete
+          </button>
+        )}
       </div>
 
       {session.summary && (

@@ -192,6 +192,12 @@ class Application {
       }
     });
 
+    this.sessions.on("session:discarded", ({ id }) => {
+      this.audioPersist.setSessionId(null);
+      refreshTrayMenu(this.prefs.get().listeningEnabled);
+      sendEvent({ type: "session:discarded", payload: { id } });
+    });
+
     this.appWatcher.on("activate", async (bundleId, name) => {
       if (!this.prefs.get().listeningEnabled) return;
       await this.audio.addAppSource({ bundleId });

@@ -1,10 +1,15 @@
 import type { SessionMeta } from "@notetaker/core";
 
-/** Recent list is newest-first; #1 is the most recent session. */
-export function formatSessionListTitle(session: SessionMeta, indexInList: number): string {
-  const n = indexInList + 1;
-  const base = session.title?.trim() || "Untitled session";
-  return `#${n} ${base}`;
+/** Use the summarizer-supplied title if present, else a short date label. */
+export function formatSessionListTitle(session: SessionMeta): string {
+  const title = session.title?.trim();
+  if (title) return title;
+  return new Date(session.startedAt).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export function formatSessionDateTime(startedAt: number): string {

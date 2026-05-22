@@ -57,6 +57,10 @@ export function App() {
           setSegments([]);
           void api().invoke("sessions:list", { limit: 50 }).then(setSessions);
           break;
+        case "session:discarded":
+          setActiveSession(null);
+          setSegments([]);
+          break;
         case "transcript:segment":
           setSegments((prev) => [...prev, evt.payload]);
           break;
@@ -98,6 +102,14 @@ export function App() {
       setPage("review");
     }
   }, []);
+
+  const handleDeleteSession = useCallback(async (id: string) => {
+    await api().invoke("sessions:delete", id);
+    const list = await api().invoke("sessions:list", { limit: 50 });
+    setSessions(list);
+    setReviewSession((prev) => (prev?.id === id ? null : prev));
+    setPage((prev) => (prev === "review" && reviewSession?.id === id ? "session" : prev));
+  }, [reviewSession?.id]);
 
   const handleOnboardingComplete = useCallback(() => {
     setShowOnboarding(false);
@@ -164,8 +176,9 @@ export function App() {
         onNavigate={setPage}
         sessions={sessions}
         onOpenSession={handleOpenSession}
+        onDeleteSession={handleDeleteSession}
       />
-      <main className="main-content">
+      <main className={`main-content${page === "session" ? " is-stage" : ""}`}>
         {page === "session" && (
           <SessionView
             session={activeSession}
@@ -191,6 +204,7 @@ export function App() {
                 label,
               });
             }}
+            onDelete={() => handleDeleteSession(reviewSession.id)}
           />
         )}
         {page === "settings" && <SettingsView onRunSetup={handleRunSetup} />}

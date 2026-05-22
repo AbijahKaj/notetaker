@@ -11,6 +11,7 @@ export type IpcEvent =
   | { type: "listening:changed"; payload: { enabled: boolean } }
   | { type: "session:opened"; payload: Session }
   | { type: "session:closed"; payload: Session }
+  | { type: "session:discarded"; payload: { id: string } }
   | { type: "transcript:segment"; payload: TranscriptSegment }
   | { type: "audio:level"; payload: { sourceId: string; rms: number } }
   | {

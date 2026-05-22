@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { SessionMeta } from "@notetaker/core";
 import { formatSessionDateTime, formatSessionListTitle } from "../utils/sessionDisplay";
 
@@ -10,6 +11,7 @@ interface SidebarProps {
   onNavigate: (page: Page) => void;
   sessions: SessionMeta[];
   onOpenSession: (id: string) => void;
+  onDeleteSession: (id: string) => void;
 }
 
 export function Sidebar({
@@ -19,7 +21,20 @@ export function Sidebar({
   onNavigate,
   sessions,
   onOpenSession,
+  onDeleteSession,
 }: SidebarProps) {
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+
+  const handleDelete = (id: string, evt: React.MouseEvent) => {
+    evt.stopPropagation();
+    if (pendingDelete === id) {
+      setPendingDelete(null);
+      onDeleteSession(id);
+    } else {
+      setPendingDelete(id);
+    }
+  };
+
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -51,17 +66,35 @@ export function Sidebar({
           <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
             Recent
           </div>
-          {sessions.slice(0, 10).map((s, i) => (
-            <button
-              key={s.id}
-              className="session-card"
-              style={{ width: "100%", textAlign: "left" }}
-              onClick={() => onOpenSession(s.id)}
-            >
-              <div className="session-card-title">{formatSessionListTitle(s, i)}</div>
-              <div className="session-card-meta">{formatSessionDateTime(s.startedAt)}</div>
-            </button>
-          ))}
+          {sessions.slice(0, 20).map((s) => {
+            const pending = pendingDelete === s.id;
+            return (
+              <div
+                key={s.id}
+                className="session-card"
+                role="button"
+                tabIndex={0}
+                onClick={() => onOpenSession(s.id)}
+                onMouseLeave={() => pending && setPendingDelete(null)}
+              >
+                <div className="session-card-row">
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="session-card-title">{formatSessionListTitle(s)}</div>
+                    <div className="session-card-meta">{formatSessionDateTime(s.startedAt)}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`session-card-delete ${pending ? "armed" : ""}`}
+                    aria-label={pending ? "Confirm delete" : "Delete session"}
+                    title={pending ? "Click again to confirm" : "Delete"}
+                    onClick={(evt) => handleDelete(s.id, evt)}
+                  >
+                    {pending ? "Delete?" : "×"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </aside>

@@ -14,7 +14,7 @@ import type { SpeechService } from "./SpeechService.js";
 
 const log = createLogger("sessions");
 
-export class SessionsService extends TypedEmitter<Pick<PipelineEvents, "session:opened" | "session:closed">> {
+export class SessionsService extends TypedEmitter<Pick<PipelineEvents, "session:opened" | "session:closed" | "session:discarded">> {
   private storage: StorageService;
   private prefs: PreferencesService;
   private speech: SpeechService | null;
@@ -135,6 +135,16 @@ export class SessionsService extends TypedEmitter<Pick<PipelineEvents, "session:
       clearInterval(this.idleTimer);
       this.idleTimer = null;
     }
+
+    // Drop sessions that never captured any speech so the history list stays meaningful.
+    const existing = this.storage.getDb().getSession(id);
+    if (existing && existing.segments.length === 0) {
+      this.storage.getDb().deleteSession(id);
+      this.emit("session:discarded", { id });
+      log.info("empty session discarded", { id });
+      return null;
+    }
+
     const session = this.storage.getDb().closeSession(id);
     if (session) {
       this.emit("session:closed", session);
