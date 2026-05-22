@@ -84,13 +84,33 @@ export class AudioIngestService extends TypedEmitter<AudioIngestEvents> {
       if (!this.micCaptureActive) {
         await this.bridge!.addMicSource();
         this.micCaptureActive = true;
-        log.info("always-on mic capture started");
+        log.info("mic capture started");
       }
       return true;
     } catch (err) {
       log.warn("mic capture unavailable", { err: String(err) });
       return false;
     }
+  }
+
+  /**
+   * Release the mic if neither listening nor preview is holding it.
+   * The bridge stays up to keep meeting-source state alive without re-handshake.
+   */
+  async releaseMicIfIdle(): Promise<void> {
+    if (this.listeningActive) return;
+    if (this.micPreviewRefCount > 0) return;
+    if (!this.micCaptureActive || !this.bridge?.isRunning()) {
+      this.micCaptureActive = false;
+      return;
+    }
+    try {
+      await this.bridge.removeByKey("mic");
+    } catch (err) {
+      log.warn("mic release failed", { err: String(err) });
+    }
+    this.micCaptureActive = false;
+    log.info("mic capture stopped");
   }
 
   async shutdown(): Promise<void> {
@@ -188,6 +208,9 @@ export class AudioIngestService extends TypedEmitter<AudioIngestEvents> {
   async stopMicPreview(): Promise<void> {
     if (this.micPreviewRefCount <= 0) return;
     this.micPreviewRefCount -= 1;
+    if (this.micPreviewRefCount === 0) {
+      await this.releaseMicIfIdle();
+    }
   }
 
   async probeSystemAudioCapture(): Promise<{ ok: boolean; message?: string }> {

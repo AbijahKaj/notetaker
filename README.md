@@ -29,8 +29,8 @@ On first run the onboarding wizard requests microphone, system-audio, and browse
 
 ## How it works
 
-- **Microphone** — always capturing after setup (menu bar shows listening state separately)
-- **Listening toggle** — controls transcription, sessions, and whitelisted system-audio capture
+- **Listening toggle** — starts/stops mic + system-audio capture, transcription, and sessions
+- **Microphone** — captured only while listening is on; pause = mic off
 - **Meeting apps** — Zoom, Teams, Slack, etc. when running and listening is on
 - **Browser tabs** — when a whitelisted site is open in Chrome, Safari, Edge, Arc, Brave, or Vivaldi
 

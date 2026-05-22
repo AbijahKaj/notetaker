@@ -111,10 +111,6 @@ class Application {
     });
     this.autoUpdate.start();
 
-    if (this.prefs.get().onboardingCompleted) {
-      await this.ensureAlwaysOnMic();
-    }
-
     if (this.prefs.get().listeningEnabled) {
       if (this.models.hasAllRequired()) {
         try {
@@ -235,7 +231,8 @@ class Application {
     return granted;
   }
 
-  async ensureAlwaysOnMic(): Promise<void> {
+  /** Acquire mic permission (if needed) and start capturing. */
+  async startMicCapture(): Promise<void> {
     const granted = await this.requestMicPermission();
     if (!granted) return;
     await this.audio.ensureMicCapture();
@@ -266,10 +263,10 @@ class Application {
       throw new Error(`Required models missing: ${missing.join(", ")}`);
     }
 
-    await this.ensureAlwaysOnMic();
+    this.audio.setListeningActive(true);
+    await this.startMicCapture();
 
     const listenStartedAt = Date.now();
-    this.audio.setListeningActive(true);
     this.sessions.beginListeningSession(listenStartedAt);
 
     await this.speech.start();
@@ -295,6 +292,7 @@ class Application {
     this.stopWatchers();
     await this.audio.removeAllMeetingSources();
     this.audio.setListeningActive(false);
+    await this.audio.releaseMicIfIdle();
     await this.speech.stop();
     await this.sessions.closeActive();
     this.audioPersist.setSessionId(null);
@@ -350,10 +348,6 @@ class Application {
 
       if (patch.automationGranted && this.prefs.get().listeningEnabled) {
         this.appWatcher.start();
-      }
-
-      if (patch.onboardingCompleted && !prev.onboardingCompleted) {
-        await this.ensureAlwaysOnMic();
       }
 
       if (patch.appWhitelist || patch.siteWhitelist) {
@@ -605,7 +599,7 @@ function refreshTrayMenu(listening: boolean): void {
     { label: "Quit", click: () => quitApp() },
   ]);
   tray.setContextMenu(menu);
-  tray.setToolTip(listening ? "NoteTaker — listening" : "NoteTaker — paused (mic always on)");
+  tray.setToolTip(listening ? "NoteTaker — listening" : "NoteTaker — paused");
   const dot = listening ? "●" : "○";
   tray.setTitle(dot);
 }
