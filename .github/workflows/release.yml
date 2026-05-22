@@ -26,45 +26,43 @@ jobs:
       - name: Read version from package.json
         id: version
         run: |
+          ROOT_VERSION=$(node -p "require('./package.json').version")
           VERSION=$(node -p "require('./apps/desktop/package.json').version")
+          if [ "$ROOT_VERSION" != "$VERSION" ]; then
+            echo "::error::Version mismatch: root package.json is $ROOT_VERSION but apps/desktop/package.json is $VERSION. Bump both before releasing."
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing v$VERSION"
 
       - name: Check if release already exists
-        id: preflight
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TAG="v${VERSION}"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Release $TAG already exists — nothing to deploy."
-          elif git rev-parse "$TAG^{tag}" >/dev/null 2>&1; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Tag $TAG already exists — nothing to deploy."
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Release $TAG already exists. Bump the version in package.json before releasing again."
+            exit 1
+          fi
+          if git rev-parse "$TAG^{tag}" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists. Bump the version in package.json before releasing again."
+            exit 1
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install dependencies
-        if: steps.preflight.outputs.skip != 'true'
         run: pnpm install --no-frozen-lockfile
 
       - name: Build packages
-        if: steps.preflight.outputs.skip != 'true'
         run: pnpm -r build
 
       - name: Build Swift audio sidecar
-        if: steps.preflight.outputs.skip != 'true'
         run: bash scripts/build-sidecar.sh
 
       - name: Rebuild native modules for Electron
-        if: steps.preflight.outputs.skip != 'true'
         run: pnpm --filter desktop exec electron-builder install-app-deps
 
       - name: Generate release notes
-        if: steps.preflight.outputs.skip != 'true'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TAG="v${VERSION}"
@@ -82,7 +80,6 @@ jobs:
       # electron-builder reads release-notes.md from resources/ and publishes
       # a GitHub release tagged v<version> with those notes.
       - name: Package, sign, notarize, and publish macOS app
-        if: steps.preflight.outputs.skip != 'true'
         run: pnpm --filter desktop package:mac --publish always
         env:
           CI: true
@@ -94,7 +91,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Upload build artifacts (debugging)
-        if: always() && steps.preflight.outputs.skip != 'true'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: notetaker-mac-v${{ steps.version.outputs.version }}
