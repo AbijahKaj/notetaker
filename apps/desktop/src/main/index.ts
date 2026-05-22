@@ -30,6 +30,7 @@ import { AppWatcherService } from "./services/AppWatcherService.js";
 import { PermissionsService } from "./services/PermissionsService.js";
 import { applyLaunchAtLogin } from "./services/LaunchAtLoginService.js";
 import { AutoUpdateService } from "./services/AutoUpdateService.js";
+import { performUninstall } from "./services/UninstallService.js";
 
 crashReporter.start({
   productName: "NoteTaker",
@@ -115,7 +116,21 @@ class Application {
     }
 
     if (this.prefs.get().listeningEnabled) {
-      await this.enableListening();
+      if (this.models.hasAllRequired()) {
+        try {
+          await this.enableListening();
+        } catch (err) {
+          log.warn("auto-enable listening failed", { err: String(err) });
+          await this.prefs.update({ listeningEnabled: false });
+          refreshTrayMenu(false);
+        }
+      } else {
+        // Models were removed (or never finished installing) on a previous run.
+        // Don't auto-start; let the user re-run setup so they get clear feedback.
+        log.warn("not auto-enabling listening: required models missing");
+        await this.prefs.update({ listeningEnabled: false });
+        refreshTrayMenu(false);
+      }
     } else {
       refreshTrayMenu(false);
     }
@@ -231,6 +246,20 @@ class Application {
   }
 
   private async enableListening(): Promise<void> {
+    const missing = this.models.missingRequired();
+    if (missing.length > 0) {
+      sendEvent({
+        type: "error",
+        payload: {
+          where: "models",
+          message:
+            "Speech models are not installed. Open Settings → Run setup again to download them.",
+        },
+      });
+      log.warn("listening blocked: required models missing", { missing });
+      throw new Error(`Required models missing: ${missing.join(", ")}`);
+    }
+
     await this.ensureAlwaysOnMic();
 
     const listenStartedAt = Date.now();
@@ -240,6 +269,17 @@ class Application {
     await this.speech.start();
     this.speech.setTimelineOrigin(listenStartedAt);
     this.startWatchers();
+
+    if (!this.speech.isSttReady()) {
+      sendEvent({
+        type: "error",
+        payload: {
+          where: "stt",
+          message:
+            "Speech recognition couldn't initialize. Try Run setup again to re-download models, or check Reveal crash logs.",
+        },
+      });
+    }
 
     refreshTrayMenu(true);
     sendEvent({ type: "listening:changed", payload: { enabled: true } });
@@ -258,8 +298,19 @@ class Application {
 
   async toggleListening(): Promise<boolean> {
     const next = !this.prefs.get().listeningEnabled;
-    if (next) await this.enableListening();
-    else await this.disableListening();
+    if (next) {
+      try {
+        await this.enableListening();
+      } catch (err) {
+        log.warn("enable listening failed", { err: String(err) });
+        // Stay paused; surface the underlying error to the renderer.
+        await this.prefs.update({ listeningEnabled: false });
+        refreshTrayMenu(false);
+        return false;
+      }
+    } else {
+      await this.disableListening();
+    }
     await this.prefs.update({ listeningEnabled: next });
     return next;
   }
@@ -384,6 +435,10 @@ class Application {
         throw err;
       }
     });
+    handle<"models:requiredReady">("models:requiredReady", () => {
+      const missing = this.models.missingRequired();
+      return { ready: missing.length === 0, missing };
+    });
 
     handle<"apps:detected">("apps:detected", async () => this.appWatcher.detectAll());
 
@@ -441,6 +496,32 @@ class Application {
       void shell.openExternal(url);
     });
     handle<"system:appVersion">("system:appVersion", () => app.getVersion());
+    handle<"system:uninstall">("system:uninstall", async (opts) => {
+      log.warn("uninstall requested", { opts });
+      try {
+        // Stop everything that might hold file locks before we wipe the dir.
+        this.autoUpdate?.stop();
+        await this.sessions?.closeActive().catch(() => {});
+        await this.disableListening().catch(() => {});
+        await this.audio?.shutdown().catch(() => {});
+        this.storage?.close?.();
+      } catch (err) {
+        log.warn("uninstall: shutdown step failed", { err: String(err) });
+      }
+
+      const result = await performUninstall(opts ?? {});
+
+      // Schedule a hard quit after the renderer receives the response.
+      setTimeout(() => {
+        try {
+          globalShortcut.unregisterAll();
+        } catch {}
+        isQuitting = true;
+        app.exit(0);
+      }, 250);
+
+      return result;
+    });
     handle<"window:show">("window:show", () => {
       showMainWindow();
     });

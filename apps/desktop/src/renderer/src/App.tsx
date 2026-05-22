@@ -21,6 +21,7 @@ export function App() {
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [modelsReady, setModelsReady] = useState(true);
   const [updateReady, setUpdateReady] = useState<{ version: string } | null>(null);
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export function App() {
       setLiveTranscript(prefs.liveTranscript);
       const models = await api().invoke("models:status");
       const requiredMissing = models.some((m) => m.required && !m.installed);
+      setModelsReady(!requiredMissing);
       if (!prefs.onboardingCompleted || requiredMissing) {
         setShowOnboarding(true);
         setPage("onboarding");
@@ -100,6 +102,9 @@ export function App() {
   const handleOnboardingComplete = useCallback(() => {
     setShowOnboarding(false);
     setPage("session");
+    void api()
+      .invoke("models:requiredReady")
+      .then((res) => setModelsReady(res.ready));
   }, []);
 
   const handleRunSetup = useCallback(() => {
@@ -122,6 +127,14 @@ export function App() {
         <div className="error-banner">
           <span>{errorBanner}</span>
           <button type="button" className="btn btn-ghost" onClick={() => setErrorBanner(null)}>Dismiss</button>
+        </div>
+      )}
+      {!modelsReady && (
+        <div className="error-banner">
+          <span>Speech models are not installed — transcription is disabled.</span>
+          <button type="button" className="btn btn-primary" onClick={handleRunSetup}>
+            Download models
+          </button>
         </div>
       )}
       {updateReady && (

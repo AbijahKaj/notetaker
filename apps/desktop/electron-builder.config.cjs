@@ -1,6 +1,8 @@
 const { existsSync } = require("node:fs");
 const { join } = require("node:path");
 
+const { version } = require("../../package.json");
+
 const isMac = process.platform === "darwin";
 const sidecarAppPath = join(
   __dirname,
@@ -13,6 +15,9 @@ const sidecarPath = existsSync(sidecarAppPath) ? sidecarAppPath : sidecarBinaryP
 module.exports = {
   appId: "com.notetaker.desktop",
   productName: "NoteTaker",
+  extraMetadata: {
+    version,
+  },
   directories: {
     output: "release",
     buildResources: "resources",

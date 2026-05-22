@@ -55,6 +55,8 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
   private sttQueue: SpeechSegment[] = [];
   private sttProcessing = false;
   private timelineOriginMs = 0;
+  private sttReady = false;
+  private warnedNotReady = false;
 
   constructor(opts: SpeechEngineOptions) {
     super();
@@ -67,12 +69,20 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
     try {
       this.sherpa = await loadSherpa(this.opts.modelPaths);
       this.running = true;
-      log.info("speech engine started");
+      this.sttReady = Boolean(this.sherpa?.parakeet);
+      this.warnedNotReady = false;
+      log.info("speech engine started", { sttReady: this.sttReady });
     } catch (err) {
-      log.warn("sherpa-onnx not available, using stub mode", { err: String(err) });
+      log.warn("sherpa-onnx not available", { err: String(err) });
       this.sherpa = null;
       this.running = true;
+      this.sttReady = false;
+      this.warnedNotReady = false;
     }
+  }
+
+  isSttReady(): boolean {
+    return this.sttReady;
   }
 
   async stop(): Promise<void> {
@@ -305,9 +315,19 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
         return this.sherpa.parakeet.transcribe(pcm);
       } catch (err) {
         log.warn("parakeet stt error", { err: String(err) });
+        return "";
       }
     }
-    return `[transcription pending — install models via pnpm models:download]`;
+    if (!this.warnedNotReady) {
+      this.warnedNotReady = true;
+      this.emit("error", {
+        where: "stt",
+        error: new Error(
+          "Speech models are not installed. Open Settings → Run setup again to download required models.",
+        ),
+      });
+    }
+    return "";
   }
 
 }

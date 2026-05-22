@@ -26,7 +26,11 @@ export class SpeechService extends TypedEmitter<PipelineEvents> {
     this.engine.on("transcript:segment", (seg) => this.emit("transcript:segment", seg));
     this.engine.on("error", (ev) => this.emit("error", ev));
     await this.engine.start();
-    log.info("speech service started");
+    log.info("speech service started", { sttReady: this.engine.isSttReady() });
+  }
+
+  isSttReady(): boolean {
+    return this.engine?.isSttReady() ?? false;
   }
 
   async stop(): Promise<void> {

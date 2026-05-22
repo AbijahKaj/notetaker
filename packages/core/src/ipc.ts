@@ -57,6 +57,7 @@ export interface IpcInvokeMap {
   "llm:test": (provider: LlmProvider) => { ok: boolean; latencyMs?: number; error?: string };
   "models:status": () => { id: string; required: boolean; installed: boolean; sizeBytes: number }[];
   "models:download": (id: string) => { ok: boolean };
+  "models:requiredReady": () => { ready: boolean; missing: string[] };
   "apps:detected": () => { bundleId: string; name: string; installed: boolean; running: boolean }[];
   "export:markdown": (sessionId: string) => string;
   "export:json": (sessionId: string) => string;
@@ -66,6 +67,11 @@ export interface IpcInvokeMap {
   "system:revealCrashLogs": () => void;
   "system:openGithubIssue": () => void;
   "system:appVersion": () => string;
+  "system:uninstall": (opts?: { removeApp?: boolean }) => {
+    ok: boolean;
+    removed: string[];
+    errors: { path: string; error: string }[];
+  };
   "window:show": () => void;
   "window:setKeepVisible": (keep: boolean) => void;
   "update:check": () => { ok: boolean; version?: string; alreadyLatest?: boolean; error?: string };

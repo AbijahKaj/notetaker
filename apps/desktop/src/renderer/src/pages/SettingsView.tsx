@@ -19,6 +19,8 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
   const [newSite, setNewSite] = useState("");
   const [updateStatus, setUpdateStatus] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string>("");
+  const [uninstallConfirm, setUninstallConfirm] = useState<"idle" | "armed" | "running">("idle");
+  const [uninstallResult, setUninstallResult] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -87,6 +89,25 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
     setTestResult("Testing…");
     const result = await api().invoke("llm:test", prefs.llmProvider);
     setTestResult(result.ok ? `OK (${result.latencyMs}ms)` : `Failed: ${result.error}`);
+  };
+
+  const runUninstall = async () => {
+    setUninstallConfirm("running");
+    setUninstallResult("Removing data, app, and quitting…");
+    try {
+      const result = await api().invoke("system:uninstall", { removeApp: true });
+      if (result.errors.length > 0) {
+        setUninstallResult(
+          `Removed ${result.removed.length} items, but ${result.errors.length} item(s) failed. ` +
+            `First error: ${result.errors[0]?.path}: ${result.errors[0]?.error}`,
+        );
+      } else {
+        setUninstallResult(`Removed ${result.removed.length} items. Quitting…`);
+      }
+    } catch (err) {
+      setUninstallResult(`Uninstall failed: ${String(err)}`);
+      setUninstallConfirm("idle");
+    }
   };
 
   if (!prefs) return <p>Loading…</p>;
@@ -262,7 +283,7 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
         )}
       </div>
 
-      <div className="card">
+      <div className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Troubleshooting</h2>
         <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
           Crash logs are stored locally and never uploaded. Attach them when reporting a bug.
@@ -281,6 +302,40 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
             Report an issue on GitHub
           </button>
         </div>
+      </div>
+
+      <div className="card">
+        <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Uninstall</h2>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
+          Wipes preferences, recordings, the local database, downloaded models, keychain entries,
+          crash logs, the login-item entry, and the NoteTaker.app bundle itself. The app quits when done.
+        </p>
+        {uninstallConfirm === "idle" && (
+          <button
+            className="btn btn-danger"
+            onClick={() => setUninstallConfirm("armed")}
+          >
+            Uninstall NoteTaker
+          </button>
+        )}
+        {uninstallConfirm === "armed" && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn btn-danger" onClick={runUninstall}>
+              Confirm — wipe everything
+            </button>
+            <button className="btn btn-ghost" onClick={() => setUninstallConfirm("idle")}>
+              Cancel
+            </button>
+          </div>
+        )}
+        {uninstallConfirm === "running" && (
+          <button className="btn btn-danger" disabled>
+            Uninstalling…
+          </button>
+        )}
+        {uninstallResult && (
+          <p style={{ marginTop: 10, fontSize: 12, color: "var(--text-muted)" }}>{uninstallResult}</p>
+        )}
       </div>
     </div>
   );

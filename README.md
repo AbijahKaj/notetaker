@@ -93,7 +93,22 @@ native/
 scripts/
   download-models.ts        Model fetch for onboarding and CLI
   build-sidecar.sh          Build the Swift audio tap binary
+  uninstall.sh              Wipe NoteTaker data, models, keychain entries, and login items
 ```
+
+## Uninstall
+
+From inside the app: **Settings → Uninstall NoteTaker**.
+
+From the command line (works even if the app won't launch):
+
+```bash
+pnpm uninstall                          # full uninstall
+bash scripts/uninstall.sh --keep-app    # data only — keep /Applications/NoteTaker.app
+bash scripts/uninstall.sh --yes         # skip confirmation prompt
+```
+
+Both flows remove `~/Library/Application Support/NoteTaker`, downloaded models, the local SQLite database, raw audio, crash logs, `com.notetaker.desktop` keychain entries, the Launch-at-login item, and `/Applications/NoteTaker.app`.
 
 ## Architecture
 

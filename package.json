@@ -1,6 +1,6 @@
 {
   "name": "always-on-local-note-taker",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Granola-style always-on meeting note taker for macOS, local-by-default",
   "license": "Apache-2.0",
@@ -17,7 +17,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "models:download": "tsx scripts/download-models.ts --required-only",
-    "sidecar:build": "bash scripts/build-sidecar.sh"
+    "sidecar:build": "bash scripts/build-sidecar.sh",
+    "uninstall": "bash scripts/uninstall.sh"
   },
   "devDependencies": {
     "@notetaker/core": "workspace:*",

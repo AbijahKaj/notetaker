@@ -46,6 +46,17 @@ export class ModelManager {
     return existsSync(this.installPathFor(id));
   }
 
+  /** IDs of required models that are not yet on disk. */
+  missingRequired(): string[] {
+    return MODEL_CATALOG.filter((m) => m.required && !existsSync(this.installPathFor(m.id))).map(
+      (m) => m.id,
+    );
+  }
+
+  hasAllRequired(): boolean {
+    return this.missingRequired().length === 0;
+  }
+
   async download(id: string, onUpdate?: (ev: ModelDownloadUpdate) => void): Promise<void> {
     const spec = MODEL_CATALOG.find((m) => m.id === id);
     if (!spec) throw new Error(`Unknown model: ${id}`);
