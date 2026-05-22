@@ -450,7 +450,7 @@ main {
 }
 
 .card {
-  grid-column: span 3;
+  grid-column: span 2;
   background: var(--bg-card);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -470,6 +470,58 @@ main {
 }
 
 .card-wide { grid-column: span 4; }
+
+/* feature spotlight: warm-tinted card with a subtle inner glow */
+.card-feature {
+  background:
+    radial-gradient(120% 80% at 90% 0%, rgba(255, 91, 58, 0.08), transparent 60%),
+    var(--bg-card);
+  border-color: rgba(255, 91, 58, 0.2);
+}
+
+/* tiny waveform / VAD activity graphic */
+.vad-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 36px;
+  margin-top: 8px;
+}
+
+.vad-bars span {
+  width: 5px;
+  background: var(--accent);
+  border-radius: 2px;
+  opacity: 0.5;
+  transform-origin: bottom;
+}
+
+.vad-bars span:nth-child(1)  { height: 10%; animation: vad 1.6s ease-in-out  -0.0s infinite; }
+.vad-bars span:nth-child(2)  { height: 18%; animation: vad 1.6s ease-in-out  -0.1s infinite; }
+.vad-bars span:nth-child(3)  { height: 12%; animation: vad 1.6s ease-in-out  -0.2s infinite; }
+.vad-bars span:nth-child(4)  { height:  8%; animation: vad 1.6s ease-in-out  -0.3s infinite; }
+.vad-bars span:nth-child(5)  { height: 50%; animation: vad-active 1.8s ease-in-out -0.4s infinite; }
+.vad-bars span:nth-child(6)  { height: 82%; animation: vad-active 1.8s ease-in-out -0.5s infinite; }
+.vad-bars span:nth-child(7)  { height: 64%; animation: vad-active 1.8s ease-in-out -0.6s infinite; }
+.vad-bars span:nth-child(8)  { height: 92%; animation: vad-active 1.8s ease-in-out -0.7s infinite; }
+.vad-bars span:nth-child(9)  { height: 70%; animation: vad-active 1.8s ease-in-out -0.8s infinite; }
+.vad-bars span:nth-child(10) { height: 46%; animation: vad-active 1.8s ease-in-out -0.9s infinite; }
+.vad-bars span:nth-child(11) { height: 18%; animation: vad 1.6s ease-in-out -1.0s infinite; }
+.vad-bars span:nth-child(12) { height:  8%; animation: vad 1.6s ease-in-out -1.1s infinite; }
+.vad-bars span:nth-child(13) { height: 12%; animation: vad 1.6s ease-in-out -1.2s infinite; }
+.vad-bars span:nth-child(14) { height:  6%; animation: vad 1.6s ease-in-out -1.3s infinite; }
+.vad-bars span:nth-child(15) { height: 10%; animation: vad 1.6s ease-in-out -1.4s infinite; }
+
+.vad-bars span:nth-child(n+5):nth-child(-n+10) { opacity: 1; }
+
+@keyframes vad {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.6); }
+}
+@keyframes vad-active {
+  0%, 100% { transform: scaleY(0.9); }
+  50% { transform: scaleY(1.15); }
+}
 
 .card-tag {
   font-family: var(--mono);

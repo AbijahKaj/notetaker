@@ -254,7 +254,7 @@ export function SettingsView({ onRunSetup }: SettingsViewProps) {
       <div className="card" style={{ marginBottom: 16 }}>
         <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Updates</h2>
         <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 10 }}>
-          {appVersion ? `NoteTaker ${appVersion}` : "NoteTaker"} — updates are checked automatically.
+          {appVersion ? `NoteTaker ${appVersion}` : "NoteTaker"} — checked once on launch. Use the button below to re-check now.
         </p>
         <button className="btn btn-ghost" onClick={checkForUpdates}>Check for updates</button>
         {updateStatus && (

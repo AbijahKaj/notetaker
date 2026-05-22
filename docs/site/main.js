@@ -10,6 +10,10 @@
   // DOWNLOAD BUTTONS — resolve to direct GitHub asset URL
   // ────────────────────────────────────────────────────────────
 
+  // Button hrefs in the HTML already point to a stable GitHub URL that
+  // 302-redirects to the latest release's DMG. We never replace the URL —
+  // we just enhance the label with the version number, and update the
+  // file-size meta line. If the API call fails, the button still works.
   const downloadBtns = [
     document.getElementById("download-btn"),
     document.getElementById("download-btn-2"),
@@ -21,27 +25,6 @@
     const span = btn.querySelector(".btn-label");
     if (span) span.textContent = label;
     else btn.textContent = label;
-  }
-
-  function activateButton(btn, href, label, filename) {
-    btn.href = href;
-    btn.removeAttribute("aria-disabled");
-    btn.setAttribute("download", filename || "");
-    setBtnLabel(btn, label);
-  }
-
-  function fallbackToReleases() {
-    downloadBtns.forEach((btn) => {
-      btn.href = "https://github.com/" + REPO + "/releases";
-      btn.removeAttribute("aria-disabled");
-      btn.removeAttribute("download");
-      btn.removeAttribute("target");
-      btn.target = "_blank";
-      setBtnLabel(btn, "Browse releases on GitHub");
-    });
-    if (downloadMeta) {
-      downloadMeta.textContent = "No installer published yet — check back soon.";
-    }
   }
 
   function formatBytes(n) {
@@ -67,23 +50,21 @@
       return r.json();
     })
     .then((release) => {
-      const asset = pickAsset(release.assets || []);
-      if (!asset) {
-        fallbackToReleases();
-        return;
+      if (release.tag_name) {
+        downloadBtns.forEach((btn) => {
+          setBtnLabel(btn, "Download " + release.tag_name + " for macOS");
+        });
+        if (heroVersion) heroVersion.textContent = release.tag_name;
       }
-      const label = "Download " + release.tag_name + " for macOS";
-      downloadBtns.forEach((btn) => {
-        activateButton(btn, asset.browser_download_url, label, asset.name);
-      });
-      if (heroVersion) heroVersion.textContent = release.tag_name;
-      const arch = /arm64|apple|silicon/i.test(asset.name) ? "Apple Silicon" : "Universal";
-      if (downloadMeta) {
-        downloadMeta.textContent = arch + " · " + formatBytes(asset.size) + " · macOS 14.2+";
+      const asset = pickAsset(release.assets || []);
+      if (asset && downloadMeta) {
+        downloadMeta.textContent =
+          "Apple Silicon · " + formatBytes(asset.size) + " · macOS 14.2+";
       }
     })
     .catch(() => {
-      fallbackToReleases();
+      // Network or rate-limit failure — leave the buttons as-is. They
+      // already link to the latest DMG and work without JS.
     });
 
   // ────────────────────────────────────────────────────────────

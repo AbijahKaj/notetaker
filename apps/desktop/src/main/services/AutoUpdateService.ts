@@ -6,8 +6,6 @@ import { createLogger } from "@notetaker/core";
 const { autoUpdater } = pkg;
 const log = createLogger("auto-update");
 
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
-
 type Events = {
   "update:available": [{ version: string; releaseNotes?: string }];
   "update:progress": [{ percent: number; bytesPerSecond: number }];
@@ -24,7 +22,6 @@ export class AutoUpdateService extends EventEmitter {
   }
 
   private started = false;
-  private timer: NodeJS.Timeout | null = null;
   private checking = false;
 
   start(): void {
@@ -58,8 +55,9 @@ export class AutoUpdateService extends EventEmitter {
       this.emit("update:error", { message: String(err?.message ?? err) });
     });
 
+    // Check once on app launch. No recurring poll — users can manually
+    // re-check from Settings or restart the app to pick up new releases.
     void this.check();
-    this.timer = setInterval(() => void this.check(), CHECK_INTERVAL_MS);
   }
 
   async check(): Promise<{ ok: boolean; version?: string; alreadyLatest?: boolean; error?: string }> {
@@ -90,9 +88,6 @@ export class AutoUpdateService extends EventEmitter {
   }
 
   stop(): void {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
+    // no-op: nothing to clean up now that we don't run a recurring timer
   }
 }

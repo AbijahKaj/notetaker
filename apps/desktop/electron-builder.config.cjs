@@ -25,7 +25,14 @@ module.exports = {
   mac: {
     category: "public.app-category.productivity",
     icon: "resources/icon.png",
-    target: ["dmg", "zip"],
+    // Stable, version-less artifact names so the landing page can link to
+    // https://github.com/.../releases/latest/download/NoteTaker-arm64.dmg
+    // without having to know the current version.
+    artifactName: "${productName}-${arch}.${ext}",
+    target: [
+      { target: "dmg", arch: "arm64" },
+      { target: "zip", arch: "arm64" },
+    ],
     hardenedRuntime: true,
     gatekeeperAssess: false,
     notarize: process.env.APPLE_TEAM_ID ? { teamId: process.env.APPLE_TEAM_ID } : false,

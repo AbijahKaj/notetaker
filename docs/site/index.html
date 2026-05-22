@@ -38,17 +38,6 @@
 
     <main>
       <section class="hero">
-        <aside class="hero-meta" aria-hidden="true">
-          <span class="rec-dot"></span>
-          <span class="hero-meta-line">REC</span>
-          <span class="hero-meta-divider"></span>
-          <span id="hero-version" class="hero-meta-line">v0.1.0</span>
-          <span class="hero-meta-divider"></span>
-          <span class="hero-meta-line">MACOS</span>
-          <span class="hero-meta-divider"></span>
-          <span class="hero-meta-line vertical">LOCAL · FIRST</span>
-        </aside>
-
         <div class="hero-body">
           <p class="eyebrow">Issue 01 — A meeting note taker that can't see your meetings.</p>
           <h1 class="display">
@@ -65,11 +54,10 @@
             <a
               id="download-btn"
               class="btn btn-primary"
-              href="https://github.com/AbijahKaj/notetaker/releases/latest"
-              aria-disabled="true"
-              download
+              href="https://github.com/AbijahKaj/notetaker/releases/latest/download/NoteTaker-arm64.dmg"
+              download="NoteTaker-arm64.dmg"
             >
-              <span class="btn-label">Fetching latest release…</span>
+              <span class="btn-label">Download for macOS</span>
               <span class="btn-arrow" aria-hidden="true">↓</span>
             </a>
             <a class="btn btn-ghost" href="https://github.com/AbijahKaj/notetaker" target="_blank" rel="noreferrer">
@@ -78,6 +66,17 @@
           </div>
           <p id="download-meta" class="hero-foot">Apple Silicon · 14.2+ · ~80&nbsp;MB</p>
         </div>
+
+        <aside class="hero-meta" aria-hidden="true">
+          <span class="rec-dot"></span>
+          <span class="hero-meta-line">REC</span>
+          <span class="hero-meta-divider"></span>
+          <span id="hero-version" class="hero-meta-line">v0.1.0</span>
+          <span class="hero-meta-divider"></span>
+          <span class="hero-meta-line">MACOS</span>
+          <span class="hero-meta-divider"></span>
+          <span class="hero-meta-line vertical">LOCAL · FIRST</span>
+        </aside>
       </section>
 
       <section id="demo" class="demo">
@@ -148,6 +147,25 @@
             </ul>
           </article>
 
+          <article class="card card-wide card-feature">
+            <span class="card-tag">efficient</span>
+            <h3>
+              The mic is always on.<br />
+              The <em>engine</em> isn't.
+            </h3>
+            <p>
+              A voice activity detector gates the entire pipeline. Parakeet
+              only spins up when someone actually speaks — so there's no
+              constant transcription, no fan noise, no battery drain. Your
+              Mac barely notices NoteTaker is there.
+            </p>
+            <div class="vad-bars" aria-hidden="true">
+              <span></span><span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span><span></span>
+            </div>
+          </article>
+
           <article class="card">
             <span class="card-tag">whitelist</span>
             <h3>System audio only when you say&nbsp;so.</h3>
@@ -175,15 +193,14 @@
             </p>
           </article>
 
-          <article class="card card-wide">
+          <article class="card">
             <span class="card-tag">workflow</span>
             <h3>
-              Always-on capture, <em>session-based</em> review.
+              Session-based <em>review.</em>
             </h3>
             <p>
-              Mic stays on. Sessions open and close around your meetings.
-              Search the full transcript history with FTS5, rename speakers
-              once and have it stick, export to Markdown, JSON, or SRT.
+              Full-text search across every meeting. Rename speakers once
+              and have it stick. Export to Markdown, JSON, or SRT.
             </p>
           </article>
 
@@ -282,11 +299,10 @@
         <a
           id="download-btn-2"
           class="btn btn-primary btn-large"
-          href="https://github.com/AbijahKaj/notetaker/releases/latest"
-          aria-disabled="true"
-          download
+          href="https://github.com/AbijahKaj/notetaker/releases/latest/download/NoteTaker-arm64.dmg"
+          download="NoteTaker-arm64.dmg"
         >
-          <span class="btn-label">Fetching latest release…</span>
+          <span class="btn-label">Download for macOS</span>
           <span class="btn-arrow" aria-hidden="true">↓</span>
         </a>
         <p class="closer-meta">

@@ -39,7 +39,8 @@ On first run the onboarding wizard requests microphone, system-audio, and browse
 Grab the latest signed and notarized build from
 [the NoteTaker website](https://abijahkaj.github.io/notetaker/) or
 [GitHub Releases](https://github.com/AbijahKaj/notetaker/releases). The app
-auto-updates by checking GitHub Releases on launch and every six hours.
+checks GitHub Releases for updates once on launch; you can also re-check
+manually in Settings.
 
 **macOS** is the supported platform. Windows/Linux CI builds are not published.
 
