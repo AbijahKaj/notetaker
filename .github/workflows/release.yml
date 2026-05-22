@@ -13,6 +13,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -61,8 +63,24 @@ jobs:
         if: steps.preflight.outputs.skip != 'true'
         run: pnpm --filter desktop exec electron-builder install-app-deps
 
-      # electron-builder reads the version from apps/desktop/package.json and
-      # creates a GitHub release tagged v<version>.
+      - name: Generate release notes
+        if: steps.preflight.outputs.skip != 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v${VERSION}"
+          OUT="apps/desktop/resources/release-notes.md"
+          PREV=$(git tag --sort=-version:refname | grep -v "^${TAG}$" | head -1 || true)
+          ARGS=(-f "tag_name=${TAG}" -f "target_commitish=${{ github.sha }}")
+          if [ -n "$PREV" ]; then
+            ARGS+=(-f "previous_tag_name=${PREV}")
+          fi
+          gh api "repos/${{ github.repository }}/releases/generate-notes" \
+            "${ARGS[@]}" --jq .body > "$OUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # electron-builder reads release-notes.md from resources/ and publishes
+      # a GitHub release tagged v<version> with those notes.
       - name: Package, sign, notarize, and publish macOS app
         if: steps.preflight.outputs.skip != 'true'
         run: pnpm --filter desktop package:mac --publish always

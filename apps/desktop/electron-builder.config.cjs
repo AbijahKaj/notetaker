@@ -63,9 +63,13 @@ module.exports = {
     "**/*.node",
   ],
   npmRebuild: true,
+  releaseInfo: {
+    releaseNotesFile: "release-notes.md",
+  },
   publish: {
     provider: "github",
     owner: "AbijahKaj",
     repo: "notetaker",
+    releaseType: "release",
   },
 };

@@ -24,6 +24,7 @@ native/mlx-summarizer/__pycache__/
 # Electron build outputs
 apps/desktop/release/
 apps/desktop/dist-electron/
+apps/desktop/resources/release-notes.md
 
 # SQLite local data
 *.db

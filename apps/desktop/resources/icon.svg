@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="nt-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#23212a"/>
+      <stop offset="100%" stop-color="#15141a"/>
+    </linearGradient>
+    <filter id="nt-glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="32"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#nt-bg)"/>
+  <g fill="#f3f0e6">
+    <rect x="160" y="400" width="704" height="56" rx="20"/>
+    <rect x="160" y="520" width="576" height="56" rx="20"/>
+    <rect x="160" y="640" width="432" height="56" rx="20"/>
+  </g>
+  <circle cx="800" cy="224" r="88" fill="#ff5b3a" opacity="0.32" filter="url(#nt-glow)"/>
+  <circle cx="800" cy="224" r="56" fill="#ff5b3a"/>
+</svg>

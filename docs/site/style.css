@@ -135,19 +135,10 @@ ul { margin: 0; padding: 0; list-style: none; }
 }
 
 .brand-mark {
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  background: var(--paper);
-  position: relative;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4) inset;
-}
-.brand-mark::after {
-  content: "";
-  position: absolute;
-  inset: 4px;
-  border-radius: 50%;
-  background: var(--accent);
+  width: 22px;
+  height: 22px;
+  background: url("./favicon.svg") no-repeat center / contain;
+  flex-shrink: 0;
 }
 
 .brand-name { color: var(--ink); }

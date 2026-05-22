@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="NoteTaker logo">
+  <defs>
+    <linearGradient id="nt-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#23212a"/>
+      <stop offset="100%" stop-color="#15141a"/>
+    </linearGradient>
+    <filter id="nt-glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#nt-bg)"/>
+  <g fill="#f3f0e6">
+    <rect x="40" y="100" width="176" height="14" rx="5"/>
+    <rect x="40" y="130" width="144" height="14" rx="5"/>
+    <rect x="40" y="160" width="108" height="14" rx="5"/>
+  </g>
+  <circle cx="200" cy="56" r="22" fill="#ff5b3a" opacity="0.32" filter="url(#nt-glow)"/>
+  <circle cx="200" cy="56" r="14" fill="#ff5b3a"/>
+</svg>
