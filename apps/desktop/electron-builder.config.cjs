@@ -45,18 +45,6 @@ module.exports = {
       ? [{ from: sidecarPath, to: existsSync(sidecarAppPath) ? "NoteTaker Audio Tap.app" : "audio-tap" }]
       : [],
   },
-  win: {
-    target: ["nsis", "portable"],
-  },
-  linux: {
-    target: ["AppImage", "deb"],
-    category: "Office",
-    maintainer: "Abijah Kajabika",
-  },
-  nsis: {
-    oneClick: false,
-    allowToChangeInstallationDirectory: true,
-  },
   asarUnpack: [
     "**/*.node",
   ],

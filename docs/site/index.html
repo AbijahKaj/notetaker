@@ -15,220 +15,319 @@
     />
     <meta property="og:type" content="website" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236c63ff'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23fff'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
+    <div class="grain" aria-hidden="true"></div>
+
     <header class="site-header">
       <a class="brand" href="./">
         <span class="brand-mark" aria-hidden="true"></span>
-        <span>NoteTaker</span>
+        <span class="brand-name">NoteTaker</span>
       </a>
       <nav class="site-nav">
+        <a href="#demo">Demo</a>
         <a href="#features">Features</a>
-        <a href="#how">How it works</a>
         <a href="#privacy">Privacy</a>
-        <a href="https://github.com/AbijahKaj/notetaker" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="https://github.com/AbijahKaj/notetaker" target="_blank" rel="noreferrer">GitHub ↗</a>
       </nav>
     </header>
 
     <main>
       <section class="hero">
-        <p class="eyebrow">macOS · local-first · open source</p>
-        <h1>
-          Your meetings, transcribed
-          <span class="hero-accent">locally.</span>
-        </h1>
-        <p class="hero-sub">
-          NoteTaker captures and transcribes every meeting on your Mac — without
-          ever uploading audio to the cloud. Live transcripts, speaker labels,
-          and AI-generated summaries, all running on your machine.
-        </p>
-        <div class="cta-row">
-          <a id="download-btn" class="btn btn-primary" href="https://github.com/AbijahKaj/notetaker/releases/latest" data-loading-label="Download for macOS">
-            Download for macOS
-          </a>
-          <a class="btn btn-ghost" href="https://github.com/AbijahKaj/notetaker" target="_blank" rel="noreferrer">
-            View source
-          </a>
+        <aside class="hero-meta" aria-hidden="true">
+          <span class="rec-dot"></span>
+          <span class="hero-meta-line">REC</span>
+          <span class="hero-meta-divider"></span>
+          <span id="hero-version" class="hero-meta-line">v0.1.0</span>
+          <span class="hero-meta-divider"></span>
+          <span class="hero-meta-line">MACOS</span>
+          <span class="hero-meta-divider"></span>
+          <span class="hero-meta-line vertical">LOCAL · FIRST</span>
+        </aside>
+
+        <div class="hero-body">
+          <p class="eyebrow">Issue 01 — A meeting note taker that can't see your meetings.</p>
+          <h1 class="display">
+            Your meetings,<br />
+            transcribed <em>locally.</em>
+          </h1>
+          <p class="lede">
+            NoteTaker captures, transcribes, and summarizes every conversation
+            on your Mac — without ever uploading a single byte of audio.
+            <span class="text-accent">It's a meeting tool, not a surveillance product.</span>
+          </p>
+
+          <div class="cta-row">
+            <a
+              id="download-btn"
+              class="btn btn-primary"
+              href="https://github.com/AbijahKaj/notetaker/releases/latest"
+              aria-disabled="true"
+              download
+            >
+              <span class="btn-label">Fetching latest release…</span>
+              <span class="btn-arrow" aria-hidden="true">↓</span>
+            </a>
+            <a class="btn btn-ghost" href="https://github.com/AbijahKaj/notetaker" target="_blank" rel="noreferrer">
+              View source ↗
+            </a>
+          </div>
+          <p id="download-meta" class="hero-foot">Apple Silicon · 14.2+ · ~80&nbsp;MB</p>
         </div>
-        <p id="download-meta" class="hero-meta">Fetching latest release…</p>
       </section>
 
-      <section class="strip">
-        <div class="strip-item">
-          <span class="strip-num">0</span>
-          <span>bytes of audio uploaded</span>
+      <section id="demo" class="demo">
+        <div class="demo-frame">
+          <div class="demo-chrome">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+            <span class="demo-title">NoteTaker · Live transcript</span>
+            <span class="demo-status">
+              <span class="rec-dot small"></span> recording
+            </span>
+          </div>
+          <div class="demo-body" id="demo-body" aria-live="polite"></div>
+          <div class="demo-foot">
+            <span class="demo-tag">demo · not real audio</span>
+            <span class="demo-counter" id="demo-counter">00:00</span>
+          </div>
         </div>
-        <div class="strip-item">
-          <span class="strip-num">~580 MB</span>
-          <span>speech models, downloaded once</span>
+      </section>
+
+      <section class="quote">
+        <p class="quote-text">
+          “Built for people who'd rather <em>remember</em> than have a SaaS
+          company remember <em>for</em> them.”
+        </p>
+        <p class="quote-attr">— colophon, 2026</p>
+      </section>
+
+      <section class="numbers">
+        <div class="num">
+          <span class="num-big">0</span>
+          <span class="num-label">bytes of audio uploaded</span>
         </div>
-        <div class="strip-item">
-          <span class="strip-num">100%</span>
-          <span>on-device transcription</span>
+        <div class="num">
+          <span class="num-big"><em>~</em>580</span>
+          <span class="num-unit">MB</span>
+          <span class="num-label">speech models, downloaded once</span>
+        </div>
+        <div class="num">
+          <span class="num-big">100<em>%</em></span>
+          <span class="num-label">on-device transcription</span>
         </div>
       </section>
 
       <section id="features" class="features">
-        <h2 class="section-title">Built for people who don't want to pick between memory and privacy.</h2>
-        <div class="feature-grid">
-          <article class="feature">
-            <div class="feature-icon" aria-hidden="true">●</div>
-            <h3>Always-on, never uploaded</h3>
+        <p class="kicker">§ Features</p>
+        <h2 class="section-title">
+          A small, sharp tool — <em>not</em> another platform.
+        </h2>
+
+        <div class="feature-mosaic">
+          <article class="card card-tall">
+            <span class="card-tag">on-device speech</span>
+            <h3>
+              Parakeet v3 <br />
+              runs on your <em>Neural Engine</em>.
+            </h3>
             <p>
-              Mic capture and speech recognition run entirely on your Mac.
-              Powered by Parakeet v3, diarization by Sortformer.
+              Apple Silicon does the heavy lifting. Live transcripts in
+              real time, speaker labels via Sortformer, language detection,
+              all without an API key in sight.
+            </p>
+            <ul class="card-list">
+              <li>Parakeet v3 (INT8)</li>
+              <li>Silero VAD</li>
+              <li>Sortformer diarization</li>
+            </ul>
+          </article>
+
+          <article class="card">
+            <span class="card-tag">whitelist</span>
+            <h3>System audio only when you say&nbsp;so.</h3>
+            <p>
+              Zoom, Meet, Teams, Slack — captured only from apps and tabs
+              you've approved. Browser URL detection, never page content.
             </p>
           </article>
-          <article class="feature">
-            <div class="feature-icon" aria-hidden="true">◆</div>
-            <h3>Whitelisted system audio</h3>
+
+          <article class="card">
+            <span class="card-tag">storage</span>
+            <h3>Encrypted by default.</h3>
             <p>
-              System audio is only captured from meeting apps and tabs you
-              approve — Zoom, Meet, Teams, Slack, the ones you actually use.
+              Local SQLite + SQLCipher. The key lives in your macOS Keychain
+              and nowhere else.
             </p>
           </article>
-          <article class="feature">
-            <div class="feature-icon" aria-hidden="true">▲</div>
-            <h3>Encrypted by default</h3>
+
+          <article class="card">
+            <span class="card-tag">summaries</span>
+            <h3>Your model, your call.</h3>
             <p>
-              Transcripts live in a local SQLCipher database. The encryption key
-              sits in the macOS Keychain — never in the cloud.
+              Claude, GPT, OpenRouter, or run Llama 3.2 3B locally via MLX.
+              Transcripts only travel if you tell them to.
             </p>
           </article>
-          <article class="feature">
-            <div class="feature-icon" aria-hidden="true">◐</div>
-            <h3>Your summaries, your model</h3>
+
+          <article class="card card-wide">
+            <span class="card-tag">workflow</span>
+            <h3>
+              Always-on capture, <em>session-based</em> review.
+            </h3>
             <p>
-              Pick Claude, OpenAI, OpenRouter, or run Llama 3.2 3B locally via
-              MLX. Transcripts only leave your Mac if you tell them to.
+              Mic stays on. Sessions open and close around your meetings.
+              Search the full transcript history with FTS5, rename speakers
+              once and have it stick, export to Markdown, JSON, or SRT.
             </p>
           </article>
-          <article class="feature">
-            <div class="feature-icon" aria-hidden="true">◇</div>
-            <h3>Speakers, search, exports</h3>
+
+          <article class="card">
+            <span class="card-tag">open source</span>
+            <h3>Apache 2.0, all the way down.</h3>
             <p>
-              Rename speakers across a session, full-text search every meeting
-              you've had, and export to Markdown, JSON, or SRT.
-            </p>
-          </article>
-          <article class="feature">
-            <div class="feature-icon" aria-hidden="true">○</div>
-            <h3>Open source, Apache-2.0</h3>
-            <p>
-              Read the code, audit the data flow, fork it if you want. The whole
-              project is on GitHub.
+              Read every line. Audit the data flow. Fork it. It's on GitHub.
             </p>
           </article>
         </div>
       </section>
 
-      <section id="how" class="how">
-        <h2 class="section-title">How it works</h2>
+      <section class="how">
+        <p class="kicker">§ Mechanism</p>
+        <h2 class="section-title">How it works.</h2>
         <ol class="steps">
           <li>
             <span class="step-num">01</span>
-            <div>
-              <h3>Capture</h3>
-              <p>
-                NoteTaker keeps the mic on after setup. When listening is
-                enabled, it also captures audio from whitelisted meeting apps
-                and browser tabs.
-              </p>
-            </div>
+            <h3>Capture</h3>
+            <p>
+              Microphone stays open after onboarding. System-audio process
+              tap activates when a whitelisted app or tab is in focus.
+            </p>
           </li>
           <li>
             <span class="step-num">02</span>
-            <div>
-              <h3>Transcribe</h3>
-              <p>
-                Silero VAD chunks the audio into utterances. Parakeet v3 runs
-                them locally on the Neural Engine and writes timestamped text.
-              </p>
-            </div>
+            <h3>Transcribe</h3>
+            <p>
+              Silero VAD chunks the stream. Parakeet runs each utterance on
+              the Neural Engine. Diarization assigns speakers.
+            </p>
           </li>
           <li>
             <span class="step-num">03</span>
-            <div>
-              <h3>Summarize</h3>
-              <p>
-                When a session ends, your chosen LLM produces a structured
-                summary with key points, decisions, action items, and a
-                follow-up email draft.
-              </p>
-            </div>
+            <h3>Summarize</h3>
+            <p>
+              When a session ends, your chosen LLM produces a structured
+              note: key points, decisions, action items, follow-up email.
+            </p>
           </li>
           <li>
             <span class="step-num">04</span>
-            <div>
-              <h3>Search later</h3>
-              <p>
-                Everything is stored in an encrypted local database with
-                full-text search. Find anything from any meeting in milliseconds.
-              </p>
-            </div>
+            <h3>Recall</h3>
+            <p>
+              Everything is encrypted and indexed. Find anything from any
+              meeting in milliseconds.
+            </p>
           </li>
         </ol>
       </section>
 
-      <section id="privacy" class="privacy-card">
-        <h2 class="section-title">Privacy you can actually verify.</h2>
-        <p class="privacy-lede">
-          We can't see your meetings. Not the audio, not the transcripts, not
-          the summaries. There is no NoteTaker server.
+      <section id="privacy" class="privacy">
+        <p class="kicker">§ Privacy</p>
+        <p class="privacy-pull">
+          We can't see your meetings.<br />
+          Not the audio, not the transcripts,<br />
+          <em>not the summaries.</em>
         </p>
-        <div class="privacy-grid">
+        <p class="privacy-sub">
+          There is no NoteTaker server. There is no NoteTaker account.
+          There's just an app, your Mac, and a Keychain item only your user
+          account can decrypt.
+        </p>
+
+        <div class="privacy-split">
           <div>
-            <h4>What stays on your Mac</h4>
-            <ul>
+            <p class="kicker small">stays on your Mac</p>
+            <ul class="bullet-list">
               <li>All audio captured by the mic and system tap</li>
               <li>Every transcript and speaker label</li>
-              <li>The encryption key (in macOS Keychain)</li>
+              <li>The encryption key in macOS Keychain</li>
               <li>Crash logs (never uploaded)</li>
             </ul>
           </div>
           <div>
-            <h4>What leaves only if you ask</h4>
-            <ul>
-              <li>Transcript text sent to your chosen cloud LLM (Anthropic, OpenAI, OpenRouter)</li>
+            <p class="kicker small">leaves only if you ask</p>
+            <ul class="bullet-list">
+              <li>Transcript text sent to your chosen cloud LLM</li>
               <li>Nothing else. No telemetry. No analytics.</li>
             </ul>
           </div>
         </div>
+
         <div class="privacy-links">
-          <a class="btn btn-ghost" href="./privacy.html">Read the full privacy policy →</a>
-          <a class="btn btn-ghost" href="./security.html">How encryption works →</a>
+          <a class="link-arrow" href="./privacy.html">Full privacy policy <span>→</span></a>
+          <a class="link-arrow" href="./security.html">How encryption works <span>→</span></a>
         </div>
       </section>
 
-      <section class="install">
-        <h2 class="section-title">Requirements</h2>
-        <div class="req-grid">
-          <div>
-            <h4>macOS 14.2+</h4>
-            <p>System-audio capture uses the CoreAudio process tap API.</p>
-          </div>
-          <div>
-            <h4>Apple Silicon recommended</h4>
-            <p>Parakeet and local MLX models run best on the Neural Engine.</p>
-          </div>
-          <div>
-            <h4>~580 MB</h4>
-            <p>One-time model download during onboarding. Stays local.</p>
-          </div>
-        </div>
+      <section class="closer">
+        <h2 class="display closer-display">
+          Try it.<br />
+          <em>It's small.</em>
+        </h2>
+        <a
+          id="download-btn-2"
+          class="btn btn-primary btn-large"
+          href="https://github.com/AbijahKaj/notetaker/releases/latest"
+          aria-disabled="true"
+          download
+        >
+          <span class="btn-label">Fetching latest release…</span>
+          <span class="btn-arrow" aria-hidden="true">↓</span>
+        </a>
+        <p class="closer-meta">
+          Free. Open source. macOS 14.2+. Apple Silicon recommended.
+        </p>
       </section>
     </main>
 
     <footer class="site-footer">
-      <div class="footer-row">
-        <span>© <span id="year"></span> NoteTaker — Apache 2.0</span>
-        <nav>
+      <div class="footer-grid">
+        <div>
+          <p class="footer-brand">
+            <span class="brand-mark" aria-hidden="true"></span> NoteTaker
+          </p>
+          <p class="footer-tagline">
+            A meeting note taker that can't see your meetings.
+          </p>
+        </div>
+        <div>
+          <p class="kicker small">Product</p>
+          <a href="#features">Features</a>
+          <a href="#demo">Demo</a>
+          <a href="https://github.com/AbijahKaj/notetaker/releases">Releases</a>
+        </div>
+        <div>
+          <p class="kicker small">Legal</p>
           <a href="./privacy.html">Privacy</a>
           <a href="./security.html">Security</a>
-          <a href="https://github.com/AbijahKaj/notetaker">GitHub</a>
+          <a href="https://github.com/AbijahKaj/notetaker/blob/main/LICENSE">License</a>
+        </div>
+        <div>
+          <p class="kicker small">Repo</p>
+          <a href="https://github.com/AbijahKaj/notetaker">Source</a>
           <a href="https://github.com/AbijahKaj/notetaker/issues/new">Report an issue</a>
-        </nav>
+          <a href="https://github.com/AbijahKaj/notetaker/security/advisories/new">Security advisories</a>
+        </div>
+      </div>
+      <div class="colophon">
+        <span>© <span id="year"></span> NoteTaker</span>
+        <span>Apache 2.0</span>
+        <span>Set in <em>Instrument Serif</em> &amp; system sans</span>
       </div>
     </footer>
 
