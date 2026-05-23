@@ -167,6 +167,12 @@ class Application {
       sendEvent({ type: "transcript:segment", payload: enriched });
     });
 
+    this.speech.on("error", (ev) => {
+      const message = ev.error instanceof Error ? ev.error.message : String(ev.error);
+      log.warn("speech error", { where: ev.where, message });
+      sendEvent({ type: "error", payload: { where: ev.where, message } });
+    });
+
     this.sessions.on("session:opened", (sess) => {
       this.speech.setSessionId(sess.id);
       this.audioPersist.setSessionId(sess.id);
@@ -274,12 +280,14 @@ class Application {
     this.startWatchers();
 
     if (!this.speech.isSttReady()) {
+      const reason = this.speech.getNotReadyReason();
       sendEvent({
         type: "error",
         payload: {
           where: "stt",
-          message:
-            "Speech recognition couldn't initialize. Try Run setup again to re-download models, or check Reveal crash logs.",
+          message: reason
+            ? `Speech recognition couldn't initialize: ${reason}`
+            : "Speech recognition couldn't initialize. Try Run setup again or Reveal crash logs.",
         },
       });
     }
@@ -373,9 +381,18 @@ class Application {
         const probe = await this.audio.probeSystemAudioCapture();
         if (!probe.ok) {
           log.warn("system audio probe", { message: probe.message });
+          sendEvent({
+            type: "error",
+            payload: {
+              where: "systemAudio",
+              message: probe.message
+                ? `Couldn't register for system audio: ${probe.message}`
+                : "Couldn't register for system audio. Try rebuilding the sidecar with: pnpm sidecar:build",
+            },
+          });
         }
         await this.permissions.openSystemAudioSettings();
-        return true;
+        return probe.ok;
       }
       return this.permissions.request(kind);
     });

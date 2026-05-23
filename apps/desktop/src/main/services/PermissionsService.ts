@@ -54,9 +54,22 @@ export class PermissionsService {
 
   async openSystemAudioSettings(): Promise<void> {
     if (process.platform !== "darwin") return;
-    await shell.openExternal(
+    // The exact URL changed between macOS versions. Try the most specific one
+    // first, fall back to the Privacy & Security root if it fails.
+    const urls = [
+      "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AudioCapture",
       "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture",
-    );
+      "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension",
+      "x-apple.systempreferences:com.apple.preference.security",
+    ];
+    for (const url of urls) {
+      try {
+        await shell.openExternal(url);
+        return;
+      } catch {
+        // try next
+      }
+    }
   }
 
   private async probeAppleEvents(): Promise<boolean> {

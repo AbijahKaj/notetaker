@@ -66,6 +66,9 @@ module.exports = {
   },
   asarUnpack: [
     "**/*.node",
+    // sherpa-onnx ships .node + sibling .dylib files linked via @rpath.
+    // Both must be unpacked side-by-side or dlopen can't resolve the libs.
+    "**/node_modules/sherpa-onnx-*/**",
   ],
   npmRebuild: true,
   releaseInfo: {

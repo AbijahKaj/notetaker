@@ -1,8 +1,8 @@
 {
   "name": "always-on-local-note-taker",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
-  "description": "Granola-style always-on meeting note taker for macOS, local-by-default",
+  "description": "Privacy-first, always-on meeting note taker for macOS, local-by-default",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

@@ -57,6 +57,7 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
   private timelineOriginMs = 0;
   private sttReady = false;
   private warnedNotReady = false;
+  private notReadyReason: string | null = null;
 
   constructor(opts: SpeechEngineOptions) {
     super();
@@ -67,14 +68,18 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
     if (this.running) return;
     if (this.timelineOriginMs === 0) this.timelineOriginMs = Date.now();
     try {
-      this.sherpa = await loadSherpa(this.opts.modelPaths);
+      const result = await loadSherpa(this.opts.modelPaths);
+      this.sherpa = result.modules;
+      this.notReadyReason = result.unavailableReason;
       this.running = true;
       this.sttReady = Boolean(this.sherpa?.parakeet);
       this.warnedNotReady = false;
-      log.info("speech engine started", { sttReady: this.sttReady });
+      log.info("speech engine started", { sttReady: this.sttReady, reason: this.notReadyReason });
     } catch (err) {
-      log.warn("sherpa-onnx not available", { err: String(err) });
+      const reason = err instanceof Error ? err.message : String(err);
+      log.warn("sherpa-onnx not available", { err: reason });
       this.sherpa = null;
+      this.notReadyReason = reason;
       this.running = true;
       this.sttReady = false;
       this.warnedNotReady = false;
@@ -83,6 +88,10 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
 
   isSttReady(): boolean {
     return this.sttReady;
+  }
+
+  getNotReadyReason(): string | null {
+    return this.notReadyReason;
   }
 
   async stop(): Promise<void> {
@@ -320,11 +329,10 @@ export class SpeechEngine extends TypedEmitter<PipelineEvents> {
     }
     if (!this.warnedNotReady) {
       this.warnedNotReady = true;
+      const reason = this.notReadyReason ?? "speech recognizer not initialized";
       this.emit("error", {
         where: "stt",
-        error: new Error(
-          "Speech models are not installed. Open Settings → Run setup again to download required models.",
-        ),
+        error: new Error(`Speech recognition unavailable: ${reason}`),
       });
     }
     return "";
@@ -340,60 +348,78 @@ interface SherpaModules {
   speakerRegistry?: SpeakerRegistry;
 }
 
-async function loadSherpa(paths: ModelPaths): Promise<SherpaModules | null> {
+interface LoadSherpaResult {
+  modules: SherpaModules | null;
+  /** Human-readable reason ASR isn't ready, or null if everything's wired. */
+  unavailableReason: string | null;
+}
+
+async function loadSherpa(paths: ModelPaths): Promise<LoadSherpaResult> {
   if (!existsSync(paths.vad)) {
-    log.warn("VAD model not found", { path: paths.vad });
-    return null;
+    const msg = `VAD model not found at ${paths.vad}`;
+    log.warn(msg);
+    return { modules: null, unavailableReason: msg };
   }
 
+  let sherpa: Awaited<ReturnType<typeof importSherpa>>;
   try {
-    const sherpa = await importSherpa();
-    let vad: SherpaModules["vad"] | undefined;
-    try {
-      vad = createSileroVad(sherpa, paths.vad);
-    } catch (err) {
-      log.warn("silero VAD init failed, using energy-based detection", { err: String(err) });
-    }
-
-    let parakeet: SherpaModules["parakeet"];
-    if (existsSync(paths.parakeet)) {
-      try {
-        parakeet = createParakeetRecognizer(sherpa, paths.parakeet);
-      } catch (err) {
-        log.warn("parakeet model load failed", { err: String(err) });
-      }
-    }
-
-    const hasDiarizationModels =
-      existsSync(paths.diarizationSegmentation) && existsSync(paths.diarizationEmbedding);
-
-    const diarizer = hasDiarizationModels
-      ? createDiarizer(sherpa, paths.diarizationSegmentation, paths.diarizationEmbedding) ?? undefined
-      : undefined;
-
-    const speakerRegistry = hasDiarizationModels
-      ? createSpeakerRegistry(sherpa, paths.diarizationEmbedding) ?? undefined
-      : undefined;
-
-    if (!hasDiarizationModels) {
-      log.warn("speaker diarization models missing", {
-        segmentation: paths.diarizationSegmentation,
-        embedding: paths.diarizationEmbedding,
-      });
-    } else if (!diarizer && !speakerRegistry) {
-      log.warn("speaker diarization failed to initialize");
-    } else {
-      log.info("speaker diarization ready", {
-        diarizer: Boolean(diarizer),
-        crossUtterance: Boolean(speakerRegistry),
-      });
-    }
-
-    return { ...(vad ? { vad } : {}), parakeet, diarizer, speakerRegistry };
+    sherpa = await importSherpa();
   } catch (err) {
-    log.warn("failed to load sherpa-onnx-node", { err: String(err) });
-    return null;
+    const msg = `sherpa-onnx-node failed to load (${err instanceof Error ? err.message : String(err)})`;
+    log.warn(msg);
+    return { modules: null, unavailableReason: msg };
   }
+
+  let vad: SherpaModules["vad"] | undefined;
+  try {
+    vad = createSileroVad(sherpa, paths.vad);
+  } catch (err) {
+    log.warn("silero VAD init failed, using energy-based detection", { err: String(err) });
+  }
+
+  let parakeet: SherpaModules["parakeet"];
+  let parakeetReason: string | null = null;
+  if (!existsSync(paths.parakeet)) {
+    parakeetReason = `Parakeet model directory missing at ${paths.parakeet}`;
+    log.warn(parakeetReason);
+  } else {
+    try {
+      parakeet = createParakeetRecognizer(sherpa, paths.parakeet);
+    } catch (err) {
+      parakeetReason = `Parakeet failed to load (${err instanceof Error ? err.message : String(err)})`;
+      log.warn(parakeetReason);
+    }
+  }
+
+  const hasDiarizationModels =
+    existsSync(paths.diarizationSegmentation) && existsSync(paths.diarizationEmbedding);
+
+  const diarizer = hasDiarizationModels
+    ? createDiarizer(sherpa, paths.diarizationSegmentation, paths.diarizationEmbedding) ?? undefined
+    : undefined;
+
+  const speakerRegistry = hasDiarizationModels
+    ? createSpeakerRegistry(sherpa, paths.diarizationEmbedding) ?? undefined
+    : undefined;
+
+  if (!hasDiarizationModels) {
+    log.warn("speaker diarization models missing", {
+      segmentation: paths.diarizationSegmentation,
+      embedding: paths.diarizationEmbedding,
+    });
+  } else if (!diarizer && !speakerRegistry) {
+    log.warn("speaker diarization failed to initialize");
+  } else {
+    log.info("speaker diarization ready", {
+      diarizer: Boolean(diarizer),
+      crossUtterance: Boolean(speakerRegistry),
+    });
+  }
+
+  return {
+    modules: { ...(vad ? { vad } : {}), parakeet, diarizer, speakerRegistry },
+    unavailableReason: parakeet ? null : parakeetReason,
+  };
 }
 
 function rmsEnergy(pcm: Float32Array): number {

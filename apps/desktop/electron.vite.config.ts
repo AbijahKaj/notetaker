@@ -14,12 +14,28 @@ const WORKSPACE_PACKAGES = [
   "@notetaker/storage",
 ];
 
+// Native modules that ship sibling .dylib / .so files. They MUST NOT be
+// bundled — the .node file is loaded via dlopen and uses @rpath to find its
+// siblings in the same directory. Bundling the .node into out/main/chunks
+// would move it away from those libraries and dyld would fail with
+// "Library not loaded: @rpath/lib...".
+const NATIVE_EXTERNALS = [
+  "sherpa-onnx-node",
+  "sherpa-onnx-darwin-arm64",
+  "sherpa-onnx-darwin-x64",
+  "sherpa-onnx-linux-x64",
+  "sherpa-onnx-linux-arm64",
+  "sherpa-onnx-win-x64",
+  "sherpa-onnx-win-ia32",
+];
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin({ exclude: WORKSPACE_PACKAGES })],
     build: {
       rollupOptions: {
         input: { index: resolve(__dirname, "src/main/index.ts") },
+        external: NATIVE_EXTERNALS,
       },
     },
   },

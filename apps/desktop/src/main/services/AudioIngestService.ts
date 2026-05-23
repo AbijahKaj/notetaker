@@ -71,16 +71,28 @@ export class AudioIngestService extends TypedEmitter<AudioIngestEvents> {
     return bridge;
   }
 
-  async ensureMicCapture(): Promise<boolean> {
+  /** Spawn the sidecar bridge without attaching any sources. */
+  async ensureBridgeRunning(): Promise<boolean> {
     if (!existsSync(this.sidecarPath)) {
       log.warn("audio sidecar not built");
       return false;
     }
-
     try {
       if (!this.bridge?.isRunning()) {
         await this.createBridge();
       }
+      return true;
+    } catch (err) {
+      log.warn("audio sidecar failed to start", { err: String(err) });
+      return false;
+    }
+  }
+
+  async ensureMicCapture(): Promise<boolean> {
+    const ok = await this.ensureBridgeRunning();
+    if (!ok) return false;
+
+    try {
       if (!this.micCaptureActive) {
         await this.bridge!.addMicSource();
         this.micCaptureActive = true;
@@ -213,6 +225,12 @@ export class AudioIngestService extends TypedEmitter<AudioIngestEvents> {
     }
   }
 
+  /**
+   * Trigger the macOS Audio Capture permission prompt by asking the sidecar to
+   * tap a benign always-running process (Finder). Crucially this does NOT
+   * acquire the mic — it only spins the sidecar and asks for a process tap,
+   * which is what registers the app under Privacy → Audio Capture.
+   */
   async probeSystemAudioCapture(): Promise<{ ok: boolean; message?: string }> {
     if (!existsSync(this.sidecarPath)) {
       return {
@@ -221,10 +239,17 @@ export class AudioIngestService extends TypedEmitter<AudioIngestEvents> {
       };
     }
 
+    const started = await this.ensureBridgeRunning();
+    if (!started) {
+      return { ok: false, message: "Audio sidecar failed to start." };
+    }
+
     try {
-      await this.ensureMicCapture();
-      await this.addAppSource({ bundleId: "com.apple.finder" });
-      await this.removeAppSource({ bundleId: "com.apple.finder" });
+      // Add then remove a Finder tap. The add command is enough to make the
+      // sidecar attempt `AudioHardwareCreateProcessTap`, which is what surfaces
+      // the macOS Audio Capture prompt the first time around.
+      await this.bridge!.addAppSource("com.apple.finder");
+      await this.bridge!.removeByKey(sourceKey({ kind: "app", bundleId: "com.apple.finder" }));
       log.info("system audio capture probe attempted (Finder tap)");
       return { ok: true };
     } catch (err) {

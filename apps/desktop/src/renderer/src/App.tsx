@@ -8,6 +8,7 @@ import { ReviewView } from "./pages/ReviewView";
 import { SettingsView, type DetectedApp } from "./pages/SettingsView";
 import { OnboardingView } from "./onboarding/OnboardingView";
 import { SearchView } from "./pages/SearchView";
+import { ErrorToasts, type ErrorToastItem } from "./components/ErrorToasts";
 
 type Page = "session" | "review" | "settings" | "onboarding" | "search";
 
@@ -29,7 +30,7 @@ export function App() {
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [errors, setErrors] = useState<ErrorToastItem[]>([]);
   const [modelsReady, setModelsReady] = useState(true);
   const [updateState, setUpdateState] = useState<
     | { phase: "idle" }
@@ -95,7 +96,22 @@ export function App() {
           });
           break;
         case "error":
-          setErrorBanner(evt.payload.message);
+          setErrors((prev) => {
+            // De-dupe identical (where + message) — recurring engine errors
+            // shouldn't stack into a wall of toasts.
+            if (prev.some((e) => e.where === evt.payload.where && e.message === evt.payload.message)) {
+              return prev;
+            }
+            return [
+              ...prev,
+              {
+                id: Date.now() + Math.floor(Math.random() * 1000),
+                where: evt.payload.where,
+                message: evt.payload.message,
+                ts: Date.now(),
+              },
+            ];
+          });
           break;
         case "preferences:changed":
           setPrefs(evt.payload);
@@ -171,12 +187,6 @@ export function App() {
 
   return (
     <div className="app-shell">
-      {errorBanner && (
-        <div className="error-banner">
-          <span>{errorBanner}</span>
-          <button type="button" className="btn btn-ghost" onClick={() => setErrorBanner(null)}>Dismiss</button>
-        </div>
-      )}
       {!modelsReady && (
         <div className="error-banner">
           <span>Speech models are not installed — transcription is disabled.</span>
@@ -185,6 +195,11 @@ export function App() {
           </button>
         </div>
       )}
+      <ErrorToasts
+        errors={errors}
+        appVersion={appVersion}
+        onDismiss={(id) => setErrors((prev) => prev.filter((e) => e.id !== id))}
+      />
       {updateState.phase !== "idle" && (
         <div className="update-toast" role="status">
           {updateState.phase === "available" && (

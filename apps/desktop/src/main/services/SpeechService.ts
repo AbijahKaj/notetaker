@@ -33,6 +33,10 @@ export class SpeechService extends TypedEmitter<PipelineEvents> {
     return this.engine?.isSttReady() ?? false;
   }
 
+  getNotReadyReason(): string | null {
+    return this.engine?.getNotReadyReason() ?? null;
+  }
+
   async stop(): Promise<void> {
     await this.engine?.stop();
     this.engine = null;
